@@ -1,0 +1,28 @@
+# Terraform state holds every secret in plaintext — never commit it.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl.bak
+crash.log
+crash.*.log
+
+# Real variable values. Only the .example is tracked.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Credentials
+*.json
+!package.json
+!.terraform.lock.hcl
+*.pem
+*.key
+.env
+.env.*
+
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.DS_Store

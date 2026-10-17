@@ -1,0 +1,111 @@
+#cloud-config
+# Container-Optimized OS. Docker is present; there is no package manager to use.
+
+write_files:
+  # Resolves the tunnel token from Secret Manager using the instance's own
+  # identity. The token never appears in instance metadata, where anything on
+  # the box could read it without IAM.
+  - path: /opt/medusa/fetch-token.sh
+    permissions: "0700"
+    owner: root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      ACCESS_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+        | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+      curl -sf -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${secret_id}/versions/latest:access" \
+        | sed -n 's/.*"data":"\([^"]*\)".*/\1/p' \
+        | base64 -d
+
+  # Called by CI over IAP with the fully-qualified image ref to roll out.
+  - path: /opt/medusa/deploy.sh
+    permissions: "0755"
+    owner: root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      IMAGE="$${1:?usage: deploy.sh <image-ref>}"
+
+      echo "authenticating to Artifact Registry…"
+      docker-credential-gcr configure-docker --registries="${region}-docker.pkg.dev"
+
+      echo "pulling $IMAGE…"
+      docker pull "$IMAGE"
+
+      echo "$IMAGE" > /opt/medusa/current-image
+
+      echo "restarting app…"
+      systemctl restart medusa-app.service
+
+      # Fail the deploy loudly rather than leaving CI to guess.
+      for i in $(seq 1 30); do
+        if curl -fsS "http://127.0.0.1:${app_port}/health" >/dev/null 2>&1; then
+          echo "✅ app healthy on attempt $i"
+          docker image prune -af --filter "until=168h" >/dev/null 2>&1 || true
+          exit 0
+        fi
+        sleep 2
+      done
+
+      echo "❌ app failed health check after rollout" >&2
+      journalctl -u medusa-app.service --no-pager -n 50 >&2
+      exit 1
+
+  - path: /etc/systemd/system/medusa-app.service
+    permissions: "0644"
+    owner: root
+    content: |
+      [Unit]
+      Description=medusa-backend application container
+      After=docker.service network-online.target
+      Requires=docker.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      ExecStartPre=-/usr/bin/docker rm -f medusa-app
+      ExecStart=/bin/bash -c '/usr/bin/docker run --rm --name medusa-app \
+        --network host \
+        -e PORT=${app_port} \
+        -e APP_ENV=${environment} \
+        --log-driver=gcplogs \
+        "$(cat /opt/medusa/current-image)"'
+      ExecStop=/usr/bin/docker stop medusa-app
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/cloudflared.service
+    permissions: "0644"
+    owner: root
+    content: |
+      [Unit]
+      Description=Cloudflare Tunnel connector
+      After=docker.service network-online.target medusa-app.service
+      Requires=docker.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      ExecStartPre=-/usr/bin/docker rm -f cloudflared
+      ExecStart=/bin/bash -c '/usr/bin/docker run --rm --name cloudflared \
+        --network host \
+        --log-driver=gcplogs \
+        cloudflare/cloudflared:latest tunnel --no-autoupdate run \
+        --token "$(/opt/medusa/fetch-token.sh)"'
+      ExecStop=/usr/bin/docker stop cloudflared
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - mkdir -p /opt/medusa
+  # Placeholder so medusa-app.service has something to start before the first
+  # real deploy. CI overwrites this on the first push to STG.
+  - echo "${bootstrap_image}" > /opt/medusa/current-image
+  - docker-credential-gcr configure-docker --registries="${region}-docker.pkg.dev"
+  - systemctl daemon-reload
+  - systemctl enable --now medusa-app.service
+  - systemctl enable --now cloudflared.service
