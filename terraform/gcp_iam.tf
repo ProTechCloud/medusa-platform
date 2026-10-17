@@ -49,7 +49,7 @@ resource "google_project_iam_member" "deployer_roles" {
   for_each = toset([
     "roles/compute.instanceAdmin.v1",   # restart / inspect the instance
     "roles/iap.tunnelResourceAccessor", # reach port 22 without a public rule
-    # osAdminLogin, not osLogin: the rollout runs `sudo /var/lib/medusa/deploy.sh`,
+    # osAdminLogin, not osLogin: the rollout runs `sudo /etc/medusa/deploy.sh`,
     # and plain osLogin lands you on the box without sudo.
     "roles/compute.osAdminLogin",
   ])
