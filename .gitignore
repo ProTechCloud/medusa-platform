@@ -26,3 +26,8 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 .DS_Store
+
+# Saved plans resolve sensitive values in cleartext.
+tfplan
+*.tfplan
+plan.txt
