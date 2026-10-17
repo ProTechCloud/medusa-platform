@@ -1,8 +1,8 @@
 # medusa-platform
 
 Terraform that provisions everything [`medusa-backend`](https://github.com/fahlula/medusa-backend)
-needs: a Cloudflare Tunnel, a small GCE instance behind it, and the scoped keys that let
-GitHub Actions deploy to it.
+needs: a Cloudflare Tunnel, a small GCE instance behind it, and the keyless federated
+identity that lets GitHub Actions deploy to it.
 
 ## Architecture
 
@@ -40,6 +40,7 @@ explicitly.
 | GCP | VPC, subnet, 2 firewall rules | IAP-only ingress, deny-all fallback |
 | GCP | e2-micro + 10 GB disk (COS, Shielded VM) | Runs app + connector |
 | GCP | 2 service accounts | Instance identity, CI deployer |
+| GCP | Workload identity pool + provider | Keyless CI auth, scoped to one repo |
 | GitHub | 6 Actions secrets + `stg` environment | Deploy credentials, written by Terraform |
 
 ## The secret path
@@ -53,11 +54,22 @@ the secret itself. A process on the box without `secretAccessor` cannot get it.
 Cloudflare tunnel token
   └─▶ google_secret_manager_secret_version   (encrypted at rest)
         └─▶ instance SA (secretAccessor on this one secret only)
-              └─▶ /opt/medusa/fetch-token.sh at boot → cloudflared
+              └─▶ /var/lib/medusa/fetch-token.sh at boot → cloudflared
 ```
 
-The CI deployer key follows the same rule: minted by `google_service_account_key`, written
-to `medusa-backend` as `GCP_SA_KEY` by the `github` provider. Nobody types it anywhere.
+CI has no key at all. The organization enforces
+`constraints/iam.disableServiceAccountKeyCreation`, so instead of a JSON key this stack
+provisions **Workload Identity Federation**: GitHub presents its OIDC token, GCP exchanges
+it for a short-lived credential, and an `attribute_condition` restricts that trade to this
+one repository. The two values written to GitHub — the provider resource name and the
+service-account email — are identifiers, not secrets.
+
+```
+GitHub Actions OIDC token  (per-run, minted by GitHub)
+  └─▶ workload identity pool provider
+        └─ attribute_condition: assertion.repository == "fahlula/medusa-backend"
+              └─▶ deployer SA, short-lived token, no key to leak or rotate
+```
 
 ## Scoping
 
@@ -97,7 +109,7 @@ export TF_VAR_github_token="$(gh auth token)"
 
 ### Remote state
 
-State contains the tunnel token and the SA private key in plaintext. The GCS backend in
+State contains the tunnel token in plaintext. The GCS backend in
 `versions.tf` is commented out until the bucket exists — **uncomment it before any
 shared use**, and never commit `*.tfstate`.
 
@@ -105,7 +117,6 @@ shared use**, and never commit `*.tfstate`.
 
 | Secret | For |
 |---|---|
-| `GCP_TF_SA_KEY` | Terraform's own GCP credential in CI |
 | `GCP_PROJECT_ID` | Target project |
 | `CLOUDFLARE_API_TOKEN` | Tunnel + DNS management |
 | `CLOUDFLARE_ACCOUNT_ID` | Account that owns the zone |

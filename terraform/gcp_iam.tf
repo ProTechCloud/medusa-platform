@@ -49,7 +49,9 @@ resource "google_project_iam_member" "deployer_roles" {
   for_each = toset([
     "roles/compute.instanceAdmin.v1",   # restart / inspect the instance
     "roles/iap.tunnelResourceAccessor", # reach port 22 without a public rule
-    "roles/compute.osLogin",            # SSH identity, no metadata keys
+    # osAdminLogin, not osLogin: the rollout runs `sudo /var/lib/medusa/deploy.sh`,
+    # and plain osLogin lands you on the box without sudo.
+    "roles/compute.osAdminLogin",
   ])
 
   project = var.gcp_project_id
@@ -64,7 +66,3 @@ resource "google_service_account_iam_member" "deployer_impersonates_instance" {
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-# The scoped key that lands in GitHub Secrets. Rotate by tainting this resource.
-resource "google_service_account_key" "deployer" {
-  service_account_id = google_service_account.deployer.name
-}

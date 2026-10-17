@@ -30,8 +30,10 @@ output "tunnel_token_secret" {
 
 output "github_secrets_written" {
   description = "Secrets this stack manages in the backend repository."
-  value = concat(
-    [github_actions_secret.gcp_sa_key.secret_name],
-    [for s in github_actions_secret.config : s.secret_name],
-  )
+  value       = [for s in github_actions_secret.config : s.secret_name]
+}
+
+output "workload_identity_provider" {
+  description = "Provider GitHub Actions federates against. No key involved."
+  value       = google_iam_workload_identity_pool_provider.github.name
 }

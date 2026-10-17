@@ -6,11 +6,6 @@ data "github_repository" "backend" {
   full_name = "${var.github_owner}/${var.backend_repository}"
 }
 
-resource "github_actions_secret" "gcp_sa_key" {
-  repository      = data.github_repository.backend.name
-  secret_name     = "GCP_SA_KEY"
-  plaintext_value = base64decode(google_service_account_key.deployer.private_key)
-}
 
 resource "github_actions_secret" "config" {
   for_each = {
@@ -19,6 +14,11 @@ resource "github_actions_secret" "config" {
     GCP_ZONE          = var.gcp_zone
     GCP_VM_NAME       = google_compute_instance.api.name
     GCP_AR_REPOSITORY = google_artifact_registry_repository.images.repository_id
+
+    # Keyless auth. Neither value is a secret on its own — they are stored as
+    # secrets only to keep the project layout out of public workflow logs.
+    GCP_WORKLOAD_IDENTITY_PROVIDER = google_iam_workload_identity_pool_provider.github.name
+    GCP_SERVICE_ACCOUNT            = google_service_account.deployer.email
   }
 
   repository      = data.github_repository.backend.name
