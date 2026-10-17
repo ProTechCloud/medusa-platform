@@ -9,7 +9,7 @@ identity that lets GitHub Actions deploy to it.
 ```
                  ┌─────────────────────────────────────────┐
   client ──TLS──▶│ Cloudflare edge                          │
-                 │ api.stg.medusa.fabianalula.site (proxied)│
+                 │ api-stg-medusa.fabianalula.site (proxied)│
                  └────────────────┬────────────────────────┘
                                   │ tunnel (outbound-initiated)
                  ┌────────────────▼────────────────────────┐
@@ -34,7 +34,7 @@ explicitly.
 | Provider | Resource | Why |
 |---|---|---|
 | Cloudflare | Zero Trust tunnel + ingress config | Public reachability without exposing the origin |
-| Cloudflare | Proxied `CNAME` → `<tunnel>.cfargotunnel.com` | `api.stg.medusa.fabianalula.site` |
+| Cloudflare | Proxied `CNAME` → `<tunnel>.cfargotunnel.com` | `api-stg-medusa.fabianalula.site` |
 | GCP | Artifact Registry (keeps 10 newest) | Image storage |
 | GCP | Secret Manager entry | Tunnel token at rest |
 | GCP | VPC, subnet, 2 firewall rules | IAP-only ingress, deny-all fallback |

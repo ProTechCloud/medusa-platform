@@ -1,6 +1,9 @@
 locals {
-  # api.stg.medusa.fabianalula.site
-  hostname = "api.${var.environment}.medusa.${var.domain}"
+  # Flat, NOT api.stg.medusa.<domain>. Cloudflare's Universal SSL covers the
+  # apex and ONE wildcard level (*.<domain>), so a three-level host has no
+  # edge certificate on the Free plan and fails the TLS handshake outright.
+  # Deeper nesting needs Advanced Certificate Manager; hyphens cost nothing.
+  hostname = "api-${var.environment}-medusa.${var.domain}"
 
   name_prefix = "${var.service}-${var.environment}"
 
