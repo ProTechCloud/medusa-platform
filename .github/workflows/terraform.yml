@@ -14,6 +14,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write   # required to mint the OIDC token WIF exchanges
 
 defaults:
   run:
@@ -36,6 +37,29 @@ jobs:
         with:
           terraform_version: 1.16.6
 
+      # The github provider fails deep inside a data source when this is empty,
+      # which reads as a Terraform bug rather than a missing bootstrap secret.
+      - name: Preflight — required secrets present
+        run: |
+          missing=0
+          for v in TF_GITHUB_TOKEN CLOUDFLARE_API_TOKEN GCP_WORKLOAD_IDENTITY_PROVIDER TF_STATE_BUCKET; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::$v is not set in repository secrets"
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo "TF_GITHUB_TOKEN must be created by hand: GitHub has no API to mint a PAT."
+            echo "See the README section 'Repository secrets this stack needs'."
+            exit 1
+          fi
+          echo "all required secrets present"
+        env:
+          TF_GITHUB_TOKEN: ${{ secrets.TF_GITHUB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
       - name: Format check
         run: terraform fmt -check -recursive -diff
 
@@ -55,12 +79,15 @@ jobs:
         with:
           terraform_version: 1.16.6
 
+      # Keyless: the org enforces iam.disableServiceAccountKeyCreation, so
+      # there is no JSON key. Only this repository may make the exchange.
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_TF_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_TF_SERVICE_ACCOUNT }}
 
       - name: Init
-        run: terraform init
+        run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
 
       - name: Plan
         id: plan
@@ -99,12 +126,15 @@ jobs:
         with:
           terraform_version: 1.16.6
 
+      # Keyless: the org enforces iam.disableServiceAccountKeyCreation, so
+      # there is no JSON key. Only this repository may make the exchange.
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_TF_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_TF_SERVICE_ACCOUNT }}
 
       - name: Init
-        run: terraform init
+        run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
 
       - name: Apply
         run: terraform apply -auto-approve -lock-timeout=5m

@@ -105,3 +105,9 @@ variable "gcp_impersonate_service_account" {
   type        = string
   default     = ""
 }
+
+variable "platform_repository" {
+  description = "Repository holding this Terraform; its CI federates in to apply."
+  type        = string
+  default     = "medusa-platform"
+}

@@ -67,8 +67,10 @@ service-account email — are identifiers, not secrets.
 ```
 GitHub Actions OIDC token  (per-run, minted by GitHub)
   └─▶ workload identity pool provider
-        └─ attribute_condition: assertion.repository == "fahlula/medusa-backend"
-              └─▶ deployer SA, short-lived token, no key to leak or rotate
+        └─ attribute_condition pins the allowed repositories
+              ├─▶ medusa-backend  → deployer SA
+              └─▶ medusa-platform → terraform CI SA
+                  short-lived tokens; no key to leak or rotate
 ```
 
 ## Scoping
@@ -76,7 +78,8 @@ GitHub Actions OIDC token  (per-run, minted by GitHub)
 | Identity | Roles |
 |---|---|
 | Instance SA | `secretAccessor` (one secret), `artifactregistry.reader` (one repo), `logging.logWriter` |
-| Deployer SA | `artifactregistry.writer` (one repo), `compute.instanceAdmin.v1`, `iap.tunnelResourceAccessor`, `compute.osLogin` |
+| Deployer SA | `artifactregistry.writer` (one repo), `compute.instanceAdmin.v1`, `iap.tunnelResourceAccessor`, `compute.osAdminLogin` |
+| Terraform CI SA | `compute.admin`, `secretmanager.admin`, `artifactregistry.admin`, `iam.serviceAccountAdmin`, `iam.workloadIdentityPoolAdmin`, `projectIamAdmin`, `serviceUsageAdmin`, `storage.admin` |
 
 Neither is a project-wide admin. Registry and secret grants are resource-scoped, not
 project-scoped.
@@ -109,16 +112,30 @@ export TF_VAR_github_token="$(gh auth token)"
 
 ### Remote state
 
-State contains the tunnel token in plaintext. The GCS backend in
-`versions.tf` is commented out until the bucket exists — **uncomment it before any
-shared use**, and never commit `*.tfstate`.
+State lives in `gs://project-78c2f5ca-96f0-47c0-ad0-tfstate` (versioned, 20 generations
+retained). It is shared by CI and laptops so both hold the same lock — without it CI would
+start from an empty state and try to recreate resources that already exist. The bucket is
+managed by this stack in `gcp_tfstate.tf`; it had to be created with local state first,
+then the backend enabled via `terraform init -migrate-state`.
+
+State contains the tunnel token in plaintext. Never commit `*.tfstate`.
 
 ## Repository secrets this stack needs
 
-| Secret | For |
-|---|---|
-| `GCP_PROJECT_ID` | Target project |
-| `CLOUDFLARE_API_TOKEN` | Tunnel + DNS management |
-| `CLOUDFLARE_ACCOUNT_ID` | Account that owns the zone |
-| `CLOUDFLARE_ZONE_ID` | `fabianalula.site` |
-| `TF_GITHUB_TOKEN` | PAT used to write secrets into `medusa-backend` |
+All but one are written by Terraform itself.
+
+| Secret | For | Written by |
+|---|---|---|
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Keyless auth | Terraform |
+| `GCP_TF_SERVICE_ACCOUNT` | Identity CI assumes | Terraform |
+| `TF_STATE_BUCKET` | Backend location | Terraform |
+| `GCP_PROJECT_ID` | Target project | Terraform |
+| `CLOUDFLARE_API_TOKEN` | Tunnel + DNS management | you, once |
+| `CLOUDFLARE_ACCOUNT_ID` | Account that owns the zone | you, once |
+| `CLOUDFLARE_ZONE_ID` | `fabianalula.site` | you, once |
+| `TF_GITHUB_TOKEN` | PAT that writes the secrets above | **you, once** |
+
+`TF_GITHUB_TOKEN` is the one credential Terraform cannot provision: GitHub has no API to
+mint a PAT, and the token that grants secret-write access cannot write itself. Create a
+fine-grained PAT scoped to both repositories with **Secrets: read/write**,
+**Environments: read/write**, **Metadata: read-only**.

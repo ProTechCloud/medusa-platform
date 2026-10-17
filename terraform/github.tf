@@ -27,6 +27,26 @@ resource "github_actions_secret" "config" {
 }
 
 # A deploy environment gate so STG rollouts are auditable and can require review later.
+# ---------- this repository's own CI ----------
+# The Terraform workflow federates in the same keyless way the backend does.
+
+data "github_repository" "platform" {
+  full_name = "${var.github_owner}/${var.platform_repository}"
+}
+
+resource "github_actions_secret" "platform" {
+  for_each = {
+    GCP_PROJECT_ID                 = var.gcp_project_id
+    GCP_WORKLOAD_IDENTITY_PROVIDER = google_iam_workload_identity_pool_provider.github.name
+    GCP_TF_SERVICE_ACCOUNT         = google_service_account.terraform_ci.email
+    TF_STATE_BUCKET                = google_storage_bucket.tfstate.name
+  }
+
+  repository      = data.github_repository.platform.name
+  secret_name     = each.key
+  plaintext_value = each.value
+}
+
 resource "github_repository_environment" "stg" {
   repository  = data.github_repository.backend.name
   environment = var.environment

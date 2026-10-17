@@ -31,3 +31,6 @@ override.tf.json
 tfplan
 *.tfplan
 plan.txt
+
+# Local credential shim for terraform runs.
+.envrc.local

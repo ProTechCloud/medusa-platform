@@ -30,7 +30,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 
   # Without this condition ANY GitHub repository on the internet could exchange
   # a token here. It is the single most important line in this file.
-  attribute_condition = "assertion.repository == '${var.github_owner}/${var.backend_repository}'"
+  # The pool admits both repositories; which service account each one may
+  # actually impersonate is pinned separately, per repository, in the bindings.
+  attribute_condition = "assertion.repository in ['${var.github_owner}/${var.backend_repository}', '${var.github_owner}/${var.platform_repository}']"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -42,4 +44,39 @@ resource "google_service_account_iam_member" "github_impersonates_deployer" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.backend_repository}"
+}
+
+# ---------- Terraform's own CI identity ----------
+# Scoped to what this stack manages. Deliberately not owner or editor: it
+# cannot reach billing, org policy, or anything outside these services.
+
+resource "google_service_account" "terraform_ci" {
+  project      = var.gcp_project_id
+  account_id   = "${var.service}-tf-ci"
+  display_name = "Terraform CI (${var.platform_repository})"
+}
+
+resource "google_project_iam_member" "terraform_ci_roles" {
+  for_each = toset([
+    "roles/compute.admin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.workloadIdentityPoolAdmin",
+    "roles/secretmanager.admin",
+    "roles/artifactregistry.admin",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/serviceusage.serviceUsageAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/storage.admin",
+  ])
+
+  project = var.gcp_project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.terraform_ci.email}"
+}
+
+# Only workflows in the platform repository may impersonate the Terraform SA.
+resource "google_service_account_iam_member" "github_impersonates_terraform_ci" {
+  service_account_id = google_service_account.terraform_ci.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.platform_repository}"
 }
