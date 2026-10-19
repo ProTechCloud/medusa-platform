@@ -26,7 +26,7 @@ resource "github_actions_secret" "config" {
   plaintext_value = each.value
 }
 
-# A deploy environment gate so STG rollouts are auditable and can require review later.
+# A deploy environment gate so stg rollouts are auditable and can require review later.
 # ---------- this repository's own CI ----------
 # The Terraform workflow federates in the same keyless way the backend does.
 
@@ -60,5 +60,5 @@ resource "github_repository_environment" "stg" {
 resource "github_repository_environment_deployment_policy" "stg_branch" {
   repository     = data.github_repository.backend.name
   environment    = github_repository_environment.stg.environment
-  branch_pattern = "STG"
+  branch_pattern = "stg"
 }
