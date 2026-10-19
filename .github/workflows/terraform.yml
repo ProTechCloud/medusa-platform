@@ -91,7 +91,13 @@ jobs:
 
       - name: Plan
         id: plan
-        run: terraform plan -no-color -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
+        # pipefail is load-bearing: without it the pipeline reports tee's exit
+        # status, so a failed plan shows as a green job and a broken config
+        # looks safe to merge.
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform plan -no-color -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
