@@ -42,7 +42,7 @@ variable "github_token" {
 variable "github_owner" {
   description = "GitHub org or user that owns the repositories."
   type        = string
-  default     = "fahlula"
+  default     = "ProTechCloud"
 }
 
 variable "backend_repository" {
