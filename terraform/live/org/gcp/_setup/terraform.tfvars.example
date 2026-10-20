@@ -1,0 +1,30 @@
+# Copy to terraform.tfvars and fill in. The real file is git-ignored.
+#
+# This root is applied by hand, with the bootstrap admin identity:
+#   gcloud auth application-default login
+#   terraform init -backend=false        # first run: local state
+#   terraform apply
+#   terraform init -migrate-state \
+#     -backend-config="bucket=<management_state_bucket output>"
+
+org_id          = "503983453092"
+billing_account = "000000-000000-000000"
+
+# Created by hand before the first apply: this root stores its own state in a
+# bucket inside this project, so the project cannot create itself.
+management_project_id = "medusa-management"
+
+environment_projects = {
+  stg = "medusa-stg"
+  prd = "medusa-prd"
+}
+
+github_owner        = "ProTechCloud"
+platform_repository = "medusa-platform"
+backend_repository  = "medusa-backend"
+
+# Created by hand at groups.google.com, invite-only. Google exposes no API for
+# creating consumer groups, and this organization has no directory for the
+# Cloud Identity API to write into. Membership is managed in the group, so
+# adding or removing a developer is not a code change.
+developer_group = "group:medusa-platform-developers@googlegroups.com"

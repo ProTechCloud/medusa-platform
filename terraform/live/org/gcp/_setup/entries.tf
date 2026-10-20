@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# The trust rules, written once and referenced by every hub below.
+#
+# Each entry is the complete set of claims that must match at the same time.
+# There are no wildcards: a claim nobody anticipated cannot slip through,
+# and reading this block tells you exactly who may become what.
+# ---------------------------------------------------------------------------
+
+locals {
+  workflows = {
+    gcp_plan         = ".github/workflows/_gcp-live-plan.yml"
+    gcp_apply        = ".github/workflows/_gcp-live-apply.yml"
+    cloudflare_plan  = ".github/workflows/_cloudflare-live-plan.yml"
+    cloudflare_apply = ".github/workflows/_cloudflare-live-apply.yml"
+    backend_deploy   = ".github/workflows/deploy-stg.yml"
+  }
+
+  # job_workflow_ref's path component is owner/repo/path, and the provider
+  # mapping has already dropped the @ref suffix.
+  wf = { for k, p in local.workflows : k => "${k == "backend_deploy" ? local.backend_repo : local.platform_repo}/${p}" }
+
+  # Plan runs on unreviewed pull-request code, so both entry points are
+  # allowed — but only through the shared plan workflow, and only read-only
+  # spokes sit behind them.
+  plan_entries = [
+    "${local.platform_repo}|${local.wf.gcp_plan}|pull-request",
+    "${local.platform_repo}|${local.wf.gcp_plan}|refs/heads/dev",
+  ]
+
+  # Apply is pinned to the branch as well. Without the ref, the same workflow
+  # run from a tag or a fork would be accepted.
+  apply_entries = {
+    stg = ["${local.platform_repo}|${local.wf.gcp_apply}|stg|refs/heads/dev"]
+    prd = ["${local.platform_repo}|${local.wf.gcp_apply}|prd|refs/heads/dev"]
+  }
+
+  cloudflare_plan_entries = [
+    "${local.platform_repo}|${local.wf.cloudflare_plan}|pull-request",
+    "${local.platform_repo}|${local.wf.cloudflare_plan}|refs/heads/dev",
+  ]
+
+  # org has no environment of its own, so it gets a dedicated one. stg and prd
+  # reuse theirs, because the Cloudflare apply for an environment runs beside
+  # that environment's GCP apply.
+  cloudflare_apply_entries = {
+    org = ["${local.platform_repo}|${local.wf.cloudflare_apply}|cloudflare-org|refs/heads/dev"]
+    stg = ["${local.platform_repo}|${local.wf.cloudflare_apply}|stg|refs/heads/dev"]
+    prd = ["${local.platform_repo}|${local.wf.cloudflare_apply}|prd|refs/heads/dev"]
+  }
+
+  # The application repository deploys from its own branch, not from dev.
+  backend_deploy_entries = ["${local.backend_repo}|${local.wf.backend_deploy}|stg|refs/heads/stg"]
+}
