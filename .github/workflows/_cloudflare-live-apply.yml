@@ -129,7 +129,6 @@ jobs:
           TF_VAR_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
           TF_VAR_domain: ${{ vars.CLOUDFLARE_DOMAIN }}
-          TF_VAR_management_state_bucket: ${{ inputs.state_bucket }}
           TF_VAR_environment_state_bucket: ${{ inputs.environment_state_bucket }}
         run: |
           set +e

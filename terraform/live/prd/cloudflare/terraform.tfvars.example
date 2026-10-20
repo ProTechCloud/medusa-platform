@@ -1,5 +1,4 @@
 account_id               = "<cloudflare account id>"
 zone_id                  = "<cloudflare zone id>"
 domain                   = "example.site"
-management_state_bucket  = "medusa-management-tfstate"
 environment_state_bucket = "medusa-prd-tfstate"

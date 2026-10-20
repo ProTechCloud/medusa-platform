@@ -18,10 +18,6 @@ variable "environment" {
   default = "stg"
 }
 
-variable "management_state_bucket" {
-  type = string
-}
-
 variable "environment_state_bucket" {
   description = "Bucket holding the environment's workload state, read to learn which port the tunnel must route to."
   type        = string
