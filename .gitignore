@@ -34,3 +34,7 @@ plan.txt
 
 # Local credential shim for terraform runs.
 .envrc.local
+
+# Lock files belong to roots, not modules. A module is never initialised
+# on its own except to validate it.
+terraform/modules/**/.terraform.lock.hcl
