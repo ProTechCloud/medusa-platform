@@ -1,0 +1,30 @@
+name: cloudflare-prd-live-apply
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    name: apply prd cloudflare
+    if: false
+    uses: ./.github/workflows/_cloudflare-live-apply.yml
+    with:
+      stack: prd
+      gh_environment: prd
+      root: terraform/live/prd/cloudflare
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      environment_state_bucket: ${{ vars.STATE_BUCKET_PRD }}
+      service_account: ${{ vars.CF_APPLY_SA_PRD }}
+      workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      CLOUDFLARE_MINT_TOKEN: ${{ secrets.CLOUDFLARE_MINT_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
