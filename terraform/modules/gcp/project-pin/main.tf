@@ -13,7 +13,9 @@ locals {
   is_service_account = can(regex("\\.iam\\.gserviceaccount\\.com$", local.email))
   credential_project = local.is_service_account ? regex("@([^.]+)\\.iam\\.gserviceaccount\\.com$", local.email)[0] : null
 
-  matches = local.is_service_account ? local.credential_project == var.expected_project_id : var.allow_user_credentials
+  allowed_projects = concat([var.expected_project_id], var.additional_allowed_projects)
+
+  matches = local.is_service_account ? contains(local.allowed_projects, local.credential_project) : var.allow_user_credentials
 }
 
 resource "terraform_data" "pin" {
@@ -24,7 +26,8 @@ resource "terraform_data" "pin" {
       condition = local.matches
       error_message = local.is_service_account ? join("", [
         "Project pin failed. This root is pinned to '${var.expected_project_id}', ",
-        "but the active credential (${local.email}) belongs to '${coalesce(local.credential_project, "unknown")}'. ",
+        "but the active credential (${local.email}) belongs to '${coalesce(local.credential_project, "unknown")}', ",
+        "which is not among ${join(", ", local.allowed_projects)}. ",
         "Nothing was changed. Check which hub the workflow requested.",
         ]) : join("", [
         "Project pin failed. This root refuses human credentials, and the active ",

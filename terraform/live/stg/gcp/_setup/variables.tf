@@ -17,3 +17,8 @@ variable "environment" {
   type    = string
   default = "stg"
 }
+
+variable "management_project_id" {
+  description = "Where the bootstrap admin lives. Named so the project pin accepts it applying this root."
+  type        = string
+}

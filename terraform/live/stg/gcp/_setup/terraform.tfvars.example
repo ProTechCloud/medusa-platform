@@ -4,3 +4,4 @@
 
 project_id              = "medusa-stg"
 management_state_bucket = "medusa-management-tfstate"
+management_project_id   = "protech-medusa-mgmt"

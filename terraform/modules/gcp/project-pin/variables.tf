@@ -8,6 +8,18 @@ variable "expected_project_id" {
   }
 }
 
+variable "additional_allowed_projects" {
+  description = <<-EOT
+    Projects whose service accounts may also run this root. `_setup` roots name
+    the management project here, because the bootstrap admin lives there and
+    applies every environment — without this the pin would refuse the one use
+    it was designed for. CI roots leave it empty, so their credential must come
+    from the project they are changing and nowhere else.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "allow_user_credentials" {
   description = <<-EOT
     Whether a human credential may run this root. A user credential carries no
