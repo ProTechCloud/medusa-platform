@@ -1,0 +1,47 @@
+# The environment's own state bucket, with its own key. Workload state lives
+# here; this root's state does not.
+module "state" {
+  source = "../../../../modules/gcp/state-bucket"
+
+  name       = "${var.project_id}-tfstate"
+  project_id = var.project_id
+  location   = var.region
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+}
+
+# Secrets get a key separate from state. Revoking one must not take the other
+# down with it: losing access to state is an outage, losing access to secrets
+# is a different outage, and conflating them means every recovery is both.
+resource "google_kms_key_ring" "secrets" {
+  name     = "${var.project_id}-secrets"
+  project  = var.project_id
+  location = var.region
+}
+
+resource "google_kms_crypto_key" "secrets" {
+  name            = "secrets"
+  key_ring        = google_kms_key_ring.secrets.id
+  purpose         = "ENCRYPT_DECRYPT"
+  rotation_period = "2592000s" # 30 days
+
+  destroy_scheduled_duration = "2592000s"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Secret Manager encrypts as its own service agent, not as the caller.
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
+resource "google_kms_crypto_key_iam_member" "secretmanager_agent" {
+  crypto_key_id = google_kms_crypto_key.secrets.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
+}
