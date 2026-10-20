@@ -23,6 +23,10 @@ on:
       management_state_bucket:
         required: true
         type: string
+      spoke_service_account:
+        description: Spoke the hub becomes. The hub itself holds no permissions.
+        required: true
+        type: string
       service_account:
         required: true
         type: string
@@ -85,7 +89,10 @@ jobs:
 
       - name: Init
         working-directory: ${{ inputs.root }}
-        run: terraform init -lockfile=readonly -backend-config="bucket=${{ inputs.state_bucket }}"
+        run: |
+          terraform init -lockfile=readonly \
+            -backend-config="bucket=${{ inputs.state_bucket }}" \
+            -backend-config="impersonate_service_account=${{ inputs.spoke_service_account }}"
 
       # The plan a reviewer approved was made against the state as it was
       # before the merge. Applying that saved plan would apply a stale view.
@@ -98,6 +105,7 @@ jobs:
         env:
           TF_VAR_project_id: ${{ inputs.project_id }}
           TF_VAR_management_state_bucket: ${{ inputs.management_state_bucket }}
+          TF_VAR_spoke_service_account: ${{ inputs.spoke_service_account }}
         run: |
           set +e
           terraform plan -no-color -input=false -lock-timeout=5m -detailed-exitcode -out=tfplan

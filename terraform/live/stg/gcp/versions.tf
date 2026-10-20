@@ -20,4 +20,10 @@ provider "google" {
   project = var.project_id
   region  = var.region
   zone    = var.zone
+
+  # The federated credential is the hub, which holds no permissions at all —
+  # its single right is to become this spoke. Without this line Terraform runs
+  # as the hub and fails on the first API call, in a way that reads like a
+  # missing role rather than a missing hop.
+  impersonate_service_account = var.spoke_service_account
 }

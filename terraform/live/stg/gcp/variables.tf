@@ -25,3 +25,8 @@ variable "app_port" {
   type        = number
   default     = 8080
 }
+
+variable "spoke_service_account" {
+  description = "Spoke this run acts as. The plan workflow passes the read-only spoke, the apply workflow the write one, so the same root is harmless or not depending only on which identity CI hands it."
+  type        = string
+}
