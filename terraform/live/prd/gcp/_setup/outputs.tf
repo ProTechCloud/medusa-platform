@@ -24,3 +24,8 @@ output "tunnel_token_writer" {
   description = "Identity the deploy job uses to write the tunnel token. The workload root grants it access to that one secret."
   value       = module.tunnel_token_writer.email
 }
+
+output "deploy_spoke" {
+  description = "Identity medusa-backend deploys as. Empty outside stg."
+  value       = one(module.deploy_spoke[*].email)
+}

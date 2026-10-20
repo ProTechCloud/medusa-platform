@@ -48,3 +48,31 @@ module "api" {
   artifact_registry_name     = module.registry.name
   artifact_registry_location = module.registry.location
 }
+
+# ---------- what the application's deploy identity may touch ----------
+# Scoped to this registry and this instance. The deploy can publish an image
+# and restart the box; it cannot create a second instance to run something
+# else, and it cannot read the tunnel token the box reads at boot.
+resource "google_artifact_registry_repository_iam_member" "deploy_pushes" {
+  project    = var.project_id
+  location   = module.registry.location
+  repository = module.registry.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${local.setup.deploy_spoke}"
+}
+
+resource "google_compute_instance_iam_member" "deploy_rolls_out" {
+  project       = var.project_id
+  zone          = var.zone
+  instance_name = module.api.instance_name
+  role          = "roles/compute.instanceAdmin.v1"
+  member        = "serviceAccount:${local.setup.deploy_spoke}"
+}
+
+# `gcloud compute ssh` acts as the instance's own service account, so the
+# deploy must be allowed to do that — on this one identity, not project-wide.
+resource "google_service_account_iam_member" "deploy_acts_as_instance" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${module.api.service_account_email}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${local.setup.deploy_spoke}"
+}

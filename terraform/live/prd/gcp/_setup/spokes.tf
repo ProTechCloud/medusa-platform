@@ -92,3 +92,31 @@ module "tunnel_token_writer" {
   description = "Writes new versions of the tunnel-token secret. Nothing else."
   hub_member  = local.apply_hub
 }
+
+# ---------- the application's deploy spoke ----------
+# Same shape as the Terraform spokes, so there is one story for how CI reaches
+# a cloud rather than two. Project-level roles live here; the bindings that
+# name a specific registry or instance are in the workload root, which is
+# where those resources exist.
+module "deploy_spoke" {
+  count  = var.environment == "stg" ? 1 : 0
+  source = "../../../../modules/gcp/wif-spoke"
+
+  project_id  = var.project_id
+  name        = "medusa-deploy"
+  description = "medusa-backend deploy: push an image, roll out the API instance."
+  hub_member  = local.backend_deploy_hub
+
+  roles = [
+    # Reaching port 22 without a public firewall rule. Narrowed to the one
+    # instance, so a second VM added later is not reachable by the deploy.
+    {
+      role       = "roles/iap.tunnelResourceAccessor"
+      title      = "only the medusa api instance"
+      expression = "resource.name == 'projects/${var.project_id}/zones/us-central1-a/instances/medusa-${var.environment}'"
+    },
+    # osAdminLogin rather than osLogin: the rollout runs a script with sudo,
+    # and plain osLogin lands on the box without it.
+    { role = "roles/compute.osAdminLogin" },
+  ]
+}
