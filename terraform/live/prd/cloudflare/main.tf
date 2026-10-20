@@ -1,0 +1,34 @@
+data "terraform_remote_state" "workload" {
+  backend = "gcs"
+
+  config = {
+    bucket = var.environment_state_bucket
+    prefix = "${var.environment}/gcp/live"
+  }
+}
+
+locals {
+  # Flat, not api.stg.medusa.<domain>. Universal SSL covers the apex and one
+  # wildcard level only, so a three-level host has no edge certificate on the
+  # Free plan and fails the handshake before any of this matters. Hyphens are
+  # free; Advanced Certificate Manager is not.
+  hostname = "api-${var.environment}-medusa.${var.domain}"
+}
+
+module "tunnel" {
+  source = "../../../modules/cloudflare/tunnel"
+
+  account_id = var.account_id
+  name       = "medusa-${var.environment}"
+  hostname   = local.hostname
+  app_port   = data.terraform_remote_state.workload.outputs.app_port
+}
+
+module "dns" {
+  source = "../../../modules/cloudflare/dns-record"
+
+  zone_id  = var.zone_id
+  hostname = local.hostname
+  target   = module.tunnel.cname_target
+  comment  = "medusa ${var.environment} — managed by terraform"
+}

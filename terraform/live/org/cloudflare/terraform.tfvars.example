@@ -1,0 +1,5 @@
+zone_id = "<cloudflare zone id>"
+
+# records = {
+#   "example.site" = { type = "TXT", content = "google-site-verification=..." }
+# }
