@@ -38,3 +38,6 @@ plan.txt
 # Lock files belong to roots, not modules. A module is never initialised
 # on its own except to validate it.
 terraform/modules/**/.terraform.lock.hcl
+
+# Bootstrap helper, not part of the standard.
+bootstrap-apply.sh

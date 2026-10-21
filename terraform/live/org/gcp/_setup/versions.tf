@@ -11,13 +11,6 @@ terraform {
     }
   }
 
-  # Bucket is supplied at init, not written here: this root creates the very
-  # bucket it later stores its state in, so the name cannot be a constant in
-  # the file that creates it. First apply runs on local state, then the state
-  # is migrated into the bucket it just made.
-  backend "gcs" {
-    prefix = "org/gcp/setup"
-  }
 }
 
 provider "google" {

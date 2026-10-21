@@ -7,15 +7,20 @@
 data "google_client_openid_userinfo" "current" {}
 
 locals {
-  email = data.google_client_openid_userinfo.current.email
+  # Null when the credential carries no usable identity token — in practice,
+  # when impersonation itself failed. Reported as its own case, because the
+  # alternative is a "null value in string template" crash that says nothing
+  # about the credential being the problem.
+  email = coalesce(data.google_client_openid_userinfo.current.email, "<unresolved>")
 
   # Service account emails embed their project: name@PROJECT.iam.gserviceaccount.com
+  resolved           = local.email != "<unresolved>"
   is_service_account = can(regex("\\.iam\\.gserviceaccount\\.com$", local.email))
   credential_project = local.is_service_account ? regex("@([^.]+)\\.iam\\.gserviceaccount\\.com$", local.email)[0] : null
 
   allowed_projects = concat([var.expected_project_id], var.additional_allowed_projects)
 
-  matches = local.is_service_account ? contains(local.allowed_projects, local.credential_project) : var.allow_user_credentials
+  matches = !local.resolved ? false : (local.is_service_account ? contains(local.allowed_projects, local.credential_project) : var.allow_user_credentials)
 }
 
 resource "terraform_data" "pin" {
@@ -24,7 +29,12 @@ resource "terraform_data" "pin" {
   lifecycle {
     precondition {
       condition = local.matches
-      error_message = local.is_service_account ? join("", [
+      error_message = !local.resolved ? join("", [
+        "Project pin could not read back who this run is. The credential has no ",
+        "usable identity token, which almost always means impersonation failed ",
+        "rather than that the pin is wrong. Check that the caller holds ",
+        "serviceAccountTokenCreator on the identity it is trying to become.",
+        ]) : local.is_service_account ? join("", [
         "Project pin failed. This root is pinned to '${var.expected_project_id}', ",
         "but the active credential (${local.email}) belongs to '${coalesce(local.credential_project, "unknown")}', ",
         "which is not among ${join(", ", local.allowed_projects)}. ",
