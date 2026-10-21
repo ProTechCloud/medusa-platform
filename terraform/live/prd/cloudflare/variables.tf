@@ -18,7 +18,15 @@ variable "environment" {
   default = "prd"
 }
 
-variable "environment_state_bucket" {
-  description = "Bucket holding the environment's workload state, read to learn which port the tunnel must route to."
-  type        = string
+variable "app_port" {
+  description = <<-EOT
+    Port the application listens on, on the origin's loopback interface.
+
+    Stated here rather than read from the GCP root's state. It is a constant of
+    the application, not an output of that stack — and reading it across roots
+    created an ordering dependency that is not real: the Cloudflare plan would
+    fail on every pull request until the GCP workload had been applied once.
+  EOT
+  type        = number
+  default     = 8080
 }

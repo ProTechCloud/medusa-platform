@@ -46,9 +46,6 @@ resource "google_project_service_identity" "secretmanager" {
   service = "secretmanager.googleapis.com"
 }
 
-data "google_project" "this" {
-  project_id = var.project_id
-}
 
 resource "google_kms_crypto_key_iam_member" "secretmanager_agent" {
   crypto_key_id = google_kms_crypto_key.secrets.id

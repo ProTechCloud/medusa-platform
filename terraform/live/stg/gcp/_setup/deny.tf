@@ -5,11 +5,6 @@
 locals {
   deny_parent = urlencode("cloudresourcemanager.googleapis.com/projects/${var.project_id}")
 
-  spoke_names = [
-    "/serviceAccounts/${module.plan_spoke.email}",
-    "/serviceAccounts/${module.apply_spoke.email}",
-    "/serviceAccounts/${module.tunnel_token_writer.email}",
-  ]
 }
 
 # A plan runs on pull-request code that nobody has reviewed. If it can read a

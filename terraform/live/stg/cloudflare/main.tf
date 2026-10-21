@@ -1,12 +1,3 @@
-data "terraform_remote_state" "workload" {
-  backend = "gcs"
-
-  config = {
-    bucket = var.environment_state_bucket
-    prefix = "${var.environment}/gcp/live"
-  }
-}
-
 locals {
   # Flat, not api.stg.medusa.<domain>. Universal SSL covers the apex and one
   # wildcard level only, so a three-level host has no edge certificate on the
@@ -21,7 +12,7 @@ module "tunnel" {
   account_id = var.account_id
   name       = "medusa-${var.environment}"
   hostname   = local.hostname
-  app_port   = data.terraform_remote_state.workload.outputs.app_port
+  app_port   = var.app_port
 }
 
 module "dns" {
