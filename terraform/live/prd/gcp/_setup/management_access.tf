@@ -1,7 +1,8 @@
 # The workload root reads this root's outputs through remote state, and that
-# state lives in the management bucket. Read-only, and only this environment's
-# prefix matters to it — but GCS grants at bucket scope, so the narrowing that
-# counts is the deny policy, not this binding.
+# state lives in the management bucket. Read-only, and narrowed by an IAM
+# condition to this environment's own prefix — uniform bucket-level access
+# allows conditions on bucket bindings, so the narrowing is in the grant
+# itself rather than in a deny policy somewhere else.
 locals {
   env_spokes = [module.plan_spoke.email, module.apply_spoke.email]
 }
@@ -12,6 +13,16 @@ resource "google_storage_bucket_iam_member" "spokes_read_management" {
   bucket = var.management_state_bucket
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${each.value}"
+
+  # Only this environment's own _setup outputs. Bucket-wide, as it was, the
+  # plan spoke — which pull-request code can reach — could read the org and
+  # the other environment's _setup states. The comment here used to claim a
+  # deny policy made that safe; no such policy existed.
+  condition {
+    title       = "only this environment's setup state"
+    description = "Objects under ${var.environment}/gcp/setup and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${var.management_state_bucket}/objects/${var.environment}/gcp/setup')"
+  }
 }
 
 resource "google_kms_crypto_key_iam_member" "spokes_decrypt_management" {

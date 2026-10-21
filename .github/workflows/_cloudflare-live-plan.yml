@@ -29,7 +29,7 @@ on:
         required: true
         type: string
     secrets:
-      CLOUDFLARE_MINT_TOKEN:
+      CLOUDFLARE_PLAN_TOKEN:
         required: true
 
 permissions:
@@ -85,57 +85,27 @@ jobs:
               })
             }
 
-      # A token that lives as long as the job cannot be replayed from a leaked
-      # log tomorrow. Read-only here, because a plan must never be able to
-      # change the edge.
-      - name: Mint a read-only Cloudflare token
-        id: cf
+      # Deliberately not the minting token.
+      #
+      # This workflow runs on pull_request, and `uses: ./…` resolves the file
+      # from the pull request's own branch. Anyone able to push a branch could
+      # therefore rewrite these steps and send whatever secret the job holds to
+      # a host of their choosing; masking only hides it from the log. A token
+      # that can mint write tokens would hand full edge access to one
+      # unreviewed pull request, which is exactly the split this pipeline
+      # exists to enforce.
+      #
+      # So plans get a long-lived read-only token instead. It is still a
+      # standing credential, but the worst a leak buys is reading DNS records
+      # that are public anyway.
+      - name: Use the read-only Cloudflare token
         if: steps.scope.outputs.relevant == 'true'
         shell: bash
         env:
-          MINT_TOKEN: ${{ secrets.CLOUDFLARE_MINT_TOKEN }}
-          ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          PLAN_TOKEN: ${{ secrets.CLOUDFLARE_PLAN_TOKEN }}
         run: |
-          set -euo pipefail
-          groups=$(curl -sS -H "Authorization: Bearer $MINT_TOKEN" \
-            "https://api.cloudflare.com/client/v4/user/tokens/permission_groups")
-
-          id_of() { echo "$groups" | jq -r --arg n "$1" '.result[] | select(.name==$n) | .id' | head -1; }
-
-          body=$(jq -n \
-            --arg name "medusa-plan-${{ inputs.stack }}-${{ github.run_id }}-${{ github.run_attempt }}" \
-            --arg acct "$ACCOUNT_ID" --arg zone "$ZONE_ID" \
-            --arg tunnel_read "$(id_of 'Cloudflare Tunnel Read')" \
-            --arg zone_read "$(id_of 'Zone Read')" \
-            --arg dns_read "$(id_of 'DNS Read')" \
-            --arg settings_read "$(id_of 'Zone Settings Read')" \
-            '{name: $name,
-              policies: [
-                {effect: "allow",
-                 resources: {("com.cloudflare.api.account." + $acct): "*"},
-                 permission_groups: [{id: $tunnel_read}]},
-                {effect: "allow",
-                 resources: {("com.cloudflare.api.account.zone." + $zone): "*"},
-                 permission_groups: [{id: $zone_read}, {id: $dns_read}, {id: $settings_read}]}
-              ]}')
-
-          created=$(curl -sS -X POST -H "Authorization: Bearer $MINT_TOKEN" \
-            -H "Content-Type: application/json" -d "$body" \
-            "https://api.cloudflare.com/client/v4/user/tokens")
-
-          if [ "$(echo "$created" | jq -r '.success')" != "true" ]; then
-            echo "::error::Could not mint a Cloudflare token"
-            echo "$created" | jq -r '.errors'
-            exit 1
-          fi
-
-          token=$(echo "$created" | jq -r '.result.value')
-          # Masked before it is used anywhere, so even an accidental `set -x`
-          # downstream prints asterisks.
-          echo "::add-mask::$token"
-          echo "CLOUDFLARE_API_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "token_id=$(echo "$created" | jq -r '.result.id')" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$PLAN_TOKEN"
+          echo "CLOUDFLARE_API_TOKEN=$PLAN_TOKEN" >> "$GITHUB_ENV"
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         if: steps.scope.outputs.relevant == 'true'
@@ -205,15 +175,3 @@ jobs:
                 issue_number: context.issue.number,
                 owner: context.repo.owner, repo: context.repo.repo, body })
             }
-
-      # always(), because the token outliving a failed job is exactly the case
-      # that matters: a run that died mid-plan is the one whose log gets read.
-      - name: Revoke the token
-        if: always() && steps.cf.outputs.token_id != ''
-        shell: bash
-        env:
-          MINT_TOKEN: ${{ secrets.CLOUDFLARE_MINT_TOKEN }}
-        run: |
-          curl -sS -X DELETE -H "Authorization: Bearer $MINT_TOKEN" \
-            "https://api.cloudflare.com/client/v4/user/tokens/${{ steps.cf.outputs.token_id }}" \
-            | jq -r '.success' | grep -q true && echo "token revoked"

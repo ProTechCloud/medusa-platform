@@ -20,4 +20,5 @@ locals {
 locals {
   # Only stg has one: the application deploys to stg and nowhere else.
   backend_deploy_hub = "serviceAccount:${local.org.backend_deploy_hub}"
+  tunnel_token_hub   = "serviceAccount:${local.org.tunnel_token_hub}"
 }

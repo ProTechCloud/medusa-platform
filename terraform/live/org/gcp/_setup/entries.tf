@@ -13,6 +13,7 @@ locals {
     cloudflare_plan  = ".github/workflows/_cloudflare-live-plan.yml"
     cloudflare_apply = ".github/workflows/_cloudflare-live-apply.yml"
     backend_deploy   = ".github/workflows/deploy-stg.yml"
+    stg_cd           = ".github/workflows/stg-cd.yml"
   }
 
   # job_workflow_ref's path component is owner/repo/path, and the provider
@@ -47,6 +48,13 @@ locals {
     stg = ["${local.platform_repo}|${local.wf.cloudflare_apply}|stg|refs/heads/dev"]
     prd = ["${local.platform_repo}|${local.wf.cloudflare_apply}|prd|refs/heads/dev"]
   }
+
+  # The tunnel-token step runs directly in stg-cd.yml rather than through a
+  # shared workflow, so its job_workflow_ref names that file. Pointing it at
+  # the apply hub would fail the exchange: that hub trusts _gcp-live-apply.yml
+  # and nothing else. It gets a hub of its own, which also keeps the rule that
+  # a hub grants exactly one thing.
+  tunnel_token_entries = ["${local.platform_repo}|${local.wf.stg_cd}|stg|refs/heads/dev"]
 
   # The application repository deploys from its own branch, not from dev.
   backend_deploy_entries = ["${local.backend_repo}|${local.wf.backend_deploy}|stg|refs/heads/stg"]

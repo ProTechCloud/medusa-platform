@@ -92,22 +92,45 @@ managed in the group from then on, so adding or removing a developer is not a co
 Order matters: each reads the previous one's outputs through remote state.
 
 ```sh
-# 3a. org/gcp/_setup — bootstraps on local state, then moves into the bucket it just made
+# 3a. org/gcp/_setup — it creates the bucket its own state will live in, so
+#     the first apply has to run without a backend at all. `init -backend=false`
+#     does not do that: it skips backend *initialisation* and then refuses to
+#     apply. The declaration has to be out of the way.
 cd terraform/live/org/gcp/_setup
 cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
-terraform init -backend=false
-terraform apply
 
-#     the chicken-and-egg step: migrate this root's state into its own bucket
-terraform init -migrate-state -backend-config="bucket=$(terraform output -raw management_state_bucket)"
+mv backend.tf backend.tf.off
+terraform init && terraform apply          # local state
+mv backend.tf.off backend.tf
 
-# 3b. the rest, all against the management bucket
+#     now move that state into the bucket it just made
+terraform init -migrate-state \
+  -backend-config="bucket=$(terraform output -raw management_state_bucket)"
+
+# 3b. the rest. Each needs its own terraform.tfvars first — org/cloudflare
+#     wants zone_id, the environment roots want project_id,
+#     management_project_id and management_state_bucket.
 for root in org/cloudflare/_setup stg/gcp/_setup prd/gcp/_setup; do
-  ( cd "terraform/live/$root" \
-    && terraform init -backend-config="bucket=<management bucket>" \
-    && terraform apply )
+  cd "terraform/live/$root"
+  cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
+  terraform init -backend-config="bucket=<management bucket>"
+  terraform apply
 done
 ```
+
+> The bootstrap admin is a service account you impersonate. If your
+> application-default credentials are themselves an impersonated account,
+> `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` will try to chain a second hop and fail;
+> mint a token directly instead:
+>
+> ```sh
+> export GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token \
+>   --impersonate-service-account=BOOTSTRAP_SA \
+>   --scopes=https://www.googleapis.com/auth/cloud-platform,openid,https://www.googleapis.com/auth/userinfo.email)"
+> ```
+>
+> The extra scopes are not optional: without them the provider cannot read back
+> which identity is running, and the project pin stops the run.
 
 ### 4. Map the outputs to GitHub variables
 
@@ -132,9 +155,10 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 
 One secret, and only one:
 
-| Secret | Why it is a secret |
-|---|---|
-| `CLOUDFLARE_MINT_TOKEN` | Creates and revokes the per-job Cloudflare tokens. The only long-lived credential in the system. |
+| Secret | Scope | Why it is a secret |
+|---|---|---|
+| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
+| `CLOUDFLARE_PLAN_TOKEN` | repository secret | Read-only. Plans run on unreviewed code, so they get a credential whose leak buys nothing but reading records that are already public. |
 
 GitHub **environments** `stg`, `prd` and `cloudflare-org` must exist; their names are part
 of the trust rules, not labels.
@@ -145,8 +169,14 @@ Terraform creates every secret with `REPLACE_ME_VIA_SECRET_MANAGER` and then ign
 value forever. Set the real ones by hand:
 
 ```sh
-printf '%s' '<value>' | gcloud secrets versions add medusa_stg_<domain>_<name> --data-file=-
+gcloud secrets versions add medusa_stg_<domain>_<name> --data-file=-
+# paste the value, then press ctrl-D
 ```
+
+Typing the value into the command itself — `printf '%s' '<value>' | …` — writes it
+to the shell history, where it outlives the terminal and is readable by anything
+that can read the bootstrap account's home directory. `--data-file=-` with no
+pipe reads from the terminal instead.
 
 The tunnel token is the exception — `stg-cd` writes it automatically after each apply.
 

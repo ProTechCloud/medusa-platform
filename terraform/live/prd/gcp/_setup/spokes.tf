@@ -82,7 +82,7 @@ module "tunnel_token_writer" {
   project_id  = var.project_id
   name        = "medusa-tunnel-token"
   description = "Writes new versions of the tunnel-token secret. Nothing else."
-  hub_member  = local.apply_hub
+  hub_member  = local.tunnel_token_hub
 }
 
 # ---------- the application's deploy spoke ----------

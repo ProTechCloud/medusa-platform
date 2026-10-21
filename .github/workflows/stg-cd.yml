@@ -62,7 +62,11 @@ jobs:
   # not even read back what it wrote.
   tunnel-token:
     name: write the tunnel token
-    needs: gcp
+    # Both, not just gcp. The secret container comes from the GCP apply, and
+    # the tunnel whose token this reads is created by the Cloudflare apply —
+    # on a first deploy the lookup would otherwise run before that tunnel
+    # exists and fail, or find the one being replaced and write a stale token.
+    needs: [gcp, cloudflare]
     runs-on: ubuntu-latest
     environment:
       name: stg
@@ -97,10 +101,14 @@ jobs:
           echo "CF_TOKEN=$token" >> "$GITHUB_ENV"
           echo "token_id=$(echo "$created" | jq -r '.result.id')" >> "$GITHUB_OUTPUT"
 
+      # Its own hub, not the apply hub. This job runs directly in this file,
+      # so its job_workflow_ref names stg-cd.yml — and the apply hub trusts
+      # only _gcp-live-apply.yml. Requesting the apply hub here fails the
+      # exchange with a 403 that reads like a missing role.
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
-          service_account: ${{ vars.GCP_APPLY_HUB_STG }}
+          service_account: ${{ vars.GCP_TUNNEL_TOKEN_HUB_STG }}
           audience: ${{ vars.GCP_WIF_AUDIENCE }}
 
       - name: Fetch the token and write a new secret version

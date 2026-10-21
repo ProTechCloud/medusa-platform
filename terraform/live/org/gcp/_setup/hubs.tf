@@ -43,6 +43,18 @@ module "backend_deploy_hub" {
   allowed_values = local.backend_deploy_entries
 }
 
+module "tunnel_token_hub" {
+  source = "../../../../modules/gcp/wif-hub"
+
+  project_id  = var.management_project_id
+  name        = "medusa-stg-tunnel-token-hub"
+  description = "Entry point for the stg-cd step that writes the tunnel token"
+
+  pool_name      = google_iam_workload_identity_pool.github.name
+  attribute      = "apply_entry"
+  allowed_values = local.tunnel_token_entries
+}
+
 # ---------- Cloudflare: identities that only reach state ----------
 # These never touch Cloudflare with a Google credential. The Cloudflare API
 # token is minted per job and revoked at the end; all these identities do is
