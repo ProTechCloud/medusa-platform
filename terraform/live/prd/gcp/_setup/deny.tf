@@ -32,25 +32,11 @@ resource "google_iam_deny_policy" "apply_cannot_escalate" {
   name         = "medusa-apply-cannot-escalate"
   display_name = "Apply cannot raise its own rights or erase the record"
 
-  # A stolen or broken apply must not be able to widen itself. Without this,
-  # serviceAccountAdmin on medusa-* accounts is enough to grant the apply
-  # spoke owner on its own project, because the spoke is itself medusa-*.
-  rules {
-    deny_rule {
-      denied_principals = [module.apply_spoke.principal]
-      denied_permissions = [
-        "iam.googleapis.com/serviceAccounts.setIamPolicy",
-        "iam.googleapis.com/serviceAccounts.update",
-        "iam.googleapis.com/serviceAccounts.delete",
-        "iam.googleapis.com/serviceAccounts.disable",
-      ]
-      denial_condition {
-        title       = "the spokes themselves"
-        description = "Applies to the plan, apply and tunnel-token identities."
-        expression  = join(" || ", [for n in local.spoke_names : "resource.name.endsWith('${n}')"])
-      }
-    }
-  }
+  # There is no rule here forbidding the apply identity from editing the
+  # spokes. Deny conditions accept only tag-matching functions — endsWith and
+  # extract are both rejected — so the restriction cannot be written as a
+  # deny. It lives in the allow instead: serviceAccountAdmin reaches only the
+  # instance account, so the spokes are out of reach to begin with.
 
   # The state bucket is the record of what exists. An apply that can delete it
   # can make the infrastructure unaccountable while leaving it running and

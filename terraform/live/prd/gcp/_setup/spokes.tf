@@ -56,16 +56,19 @@ module "apply_spoke" {
       ])
     },
 
-    # Creating the instance's service account is part of applying the stack,
-    # so this cannot be withheld entirely. Narrowing it to the stack's own
-    # naming prefix stops the apply from minting an identity outside it.
+    # The only service account this stack creates is the one the VM runs as,
+    # so the grant is narrowed to exactly that name rather than to the whole
+    # medusa- prefix.
+    #
+    # The prefix was the obvious choice and the wrong one: every spoke is also
+    # medusa-prefixed, so the apply identity would have been able to edit its
+    # own IAM policy and grant itself owner. Narrowing the allow removes that
+    # path by construction — which is better than allowing it and forbidding
+    # it again in a deny policy, because deny conditions cannot express it.
     {
-      role  = "roles/iam.serviceAccountAdmin"
-      title = "only medusa-prefixed service accounts"
-      # IAM conditions support extract() and startsWith(), but not contains().
-      # Using contains() fails at apply with "undeclared reference", which
-      # looks like a CEL version problem rather than an unsupported function.
-      expression = "resource.name.extract('/serviceAccounts/{account}').startsWith('medusa-')"
+      role       = "roles/iam.serviceAccountAdmin"
+      title      = "only the instance service account"
+      expression = "resource.name.extract('/serviceAccounts/{account}').startsWith('medusa-prd-vm')"
     },
   ]
 }
