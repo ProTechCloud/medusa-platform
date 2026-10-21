@@ -10,5 +10,5 @@ output "instance_zone" {
 
 output "service_account_email" {
   description = "Identity the box runs as."
-  value       = google_service_account.instance.email
+  value       = var.service_account_email
 }

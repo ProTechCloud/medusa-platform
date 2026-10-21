@@ -48,3 +48,8 @@ variable "labels" {
   type    = map(string)
   default = {}
 }
+
+variable "service_account_email" {
+  description = "Identity the VM runs as, created in the environment's _setup root."
+  type        = string
+}

@@ -56,20 +56,6 @@ module "apply_spoke" {
       ])
     },
 
-    # The only service account this stack creates is the one the VM runs as,
-    # so the grant is narrowed to exactly that name rather than to the whole
-    # medusa- prefix.
-    #
-    # The prefix was the obvious choice and the wrong one: every spoke is also
-    # medusa-prefixed, so the apply identity would have been able to edit its
-    # own IAM policy and grant itself owner. Narrowing the allow removes that
-    # path by construction — which is better than allowing it and forbidding
-    # it again in a deny policy, because deny conditions cannot express it.
-    {
-      role       = "roles/iam.serviceAccountAdmin"
-      title      = "only the instance service account"
-      expression = "resource.name.extract('/serviceAccounts/{account}').startsWith('medusa-prd-vm')"
-    },
   ]
 }
 
@@ -117,9 +103,12 @@ module "deploy_spoke" {
     # Reaching port 22 without a public firewall rule. Narrowed to the one
     # instance, so a second VM added later is not reachable by the deploy.
     {
-      role       = "roles/iap.tunnelResourceAccessor"
-      title      = "only the medusa api instance"
-      expression = "resource.name == 'projects/${var.project_id}/zones/us-central1-a/instances/medusa-${var.environment}'"
+      role  = "roles/iap.tunnelResourceAccessor"
+      title = "only instances in the api zone"
+      # IAP's own resource path, with the project number — the Compute path
+      # matches nothing here. The instance's numeric id is not knowable before
+      # the VM exists, so the condition stops at the zone.
+      expression = "resource.name.startsWith('projects/${data.google_project.this.number}/iap_tunnel/zones/${var.zone}/instances/')"
     },
     # osAdminLogin rather than osLogin: the rollout runs a script with sudo,
     # and plain osLogin lands on the box without it.

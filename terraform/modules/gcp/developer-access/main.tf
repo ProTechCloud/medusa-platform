@@ -38,9 +38,19 @@ resource "google_project_iam_member" "iap_tunnel" {
   role    = "roles/iap.tunnelResourceAccessor"
   member  = var.group
 
+  # IAP names its resources on its own path, with the project NUMBER and the
+  # instance's numeric id — not the Compute path with the project id and the
+  # instance name. A condition written in the Compute form matches nothing, so
+  # the grant silently allows no tunnel at all.
+  #
+  # The numeric instance id is unknown here: this root runs before the VM
+  # exists, and the id changes whenever the VM is replaced. The condition
+  # therefore pins everything up to the zone. One zone holds one API instance
+  # by design; a second VM added there would be reachable, which is the cost
+  # of not being able to name the instance in advance.
   condition {
-    title      = "only the medusa api vm"
-    expression = "resource.name == 'projects/${var.project_id}/zones/${var.zone}/instances/${var.server_access_instance}'"
+    title      = "only instances in the api zone"
+    expression = "resource.name.startsWith('projects/${var.project_number}/iap_tunnel/zones/${var.zone}/instances/')"
   }
 }
 

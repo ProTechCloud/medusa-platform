@@ -44,6 +44,7 @@ module "api" {
   app_port    = var.app_port
   labels      = local.labels
 
+  service_account_email      = local.setup.instance_service_account
   tunnel_token_secret_id     = module.tunnel_token.secret_id
   artifact_registry_name     = module.registry.name
   artifact_registry_location = module.registry.location
@@ -67,12 +68,4 @@ resource "google_compute_instance_iam_member" "deploy_rolls_out" {
   instance_name = module.api.instance_name
   role          = "roles/compute.instanceAdmin.v1"
   member        = "serviceAccount:${local.setup.deploy_spoke}"
-}
-
-# `gcloud compute ssh` acts as the instance's own service account, so the
-# deploy must be allowed to do that — on this one identity, not project-wide.
-resource "google_service_account_iam_member" "deploy_acts_as_instance" {
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${module.api.service_account_email}"
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${local.setup.deploy_spoke}"
 }

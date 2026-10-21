@@ -44,6 +44,7 @@ module "api" {
   app_port    = var.app_port
   labels      = local.labels
 
+  service_account_email      = local.setup.instance_service_account
   tunnel_token_secret_id     = module.tunnel_token.secret_id
   artifact_registry_name     = module.registry.name
   artifact_registry_location = module.registry.location

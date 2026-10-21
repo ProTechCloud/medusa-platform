@@ -29,3 +29,8 @@ output "deploy_spoke" {
   description = "Identity medusa-backend deploys as. Empty outside stg."
   value       = one(module.deploy_spoke[*].email)
 }
+
+output "instance_service_account" {
+  description = "Identity the VM runs as. Created here so the apply spoke never needs serviceAccountAdmin."
+  value       = google_service_account.instance.email
+}

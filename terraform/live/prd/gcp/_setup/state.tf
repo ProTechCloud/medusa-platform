@@ -39,6 +39,11 @@ resource "google_kms_crypto_key" "secrets" {
 # that agent does not exist until something asks for it. Enabling the API is
 # not enough: the first CMEK secret would fail with "service account does not
 # exist", which reads like a typo rather than a missing bootstrap step.
+# Needed for the IAP condition below: IAP addresses projects by number.
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
 resource "google_project_service_identity" "secretmanager" {
   provider = google-beta
 
