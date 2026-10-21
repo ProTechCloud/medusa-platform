@@ -40,4 +40,4 @@ plan.txt
 terraform/modules/**/.terraform.lock.hcl
 
 # Bootstrap helper, not part of the standard.
-bootstrap-apply.sh
+bootstrap.sh

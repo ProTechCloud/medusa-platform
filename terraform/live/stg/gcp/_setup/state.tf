@@ -35,7 +35,17 @@ resource "google_kms_crypto_key" "secrets" {
   }
 }
 
-# Secret Manager encrypts as its own service agent, not as the caller.
+# Secret Manager encrypts as its own service agent, not as the caller — and
+# that agent does not exist until something asks for it. Enabling the API is
+# not enough: the first CMEK secret would fail with "service account does not
+# exist", which reads like a typo rather than a missing bootstrap step.
+resource "google_project_service_identity" "secretmanager" {
+  provider = google-beta
+
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+}
+
 data "google_project" "this" {
   project_id = var.project_id
 }
@@ -43,5 +53,5 @@ data "google_project" "this" {
 resource "google_kms_crypto_key_iam_member" "secretmanager_agent" {
   crypto_key_id = google_kms_crypto_key.secrets.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
+  member        = "serviceAccount:${google_project_service_identity.secretmanager.email}"
 }

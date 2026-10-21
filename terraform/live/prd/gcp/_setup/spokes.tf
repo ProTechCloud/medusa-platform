@@ -60,9 +60,12 @@ module "apply_spoke" {
     # so this cannot be withheld entirely. Narrowing it to the stack's own
     # naming prefix stops the apply from minting an identity outside it.
     {
-      role       = "roles/iam.serviceAccountAdmin"
-      title      = "only medusa-prefixed service accounts"
-      expression = "resource.name.contains('/serviceAccounts/medusa-')"
+      role  = "roles/iam.serviceAccountAdmin"
+      title = "only medusa-prefixed service accounts"
+      # IAM conditions support extract() and startsWith(), but not contains().
+      # Using contains() fails at apply with "undeclared reference", which
+      # looks like a CEL version problem rather than an unsupported function.
+      expression = "resource.name.extract('/serviceAccounts/{account}').startsWith('medusa-')"
     },
   ]
 }

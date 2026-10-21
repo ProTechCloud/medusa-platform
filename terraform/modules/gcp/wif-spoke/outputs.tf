@@ -9,6 +9,11 @@ output "member" {
 }
 
 output "principal" {
-  description = "Principal identifier in the form IAM deny policies expect."
-  value       = "principal://iam.googleapis.com/projects/-/serviceAccounts/${google_service_account.spoke.unique_id}"
+  description = <<-EOT
+    Principal identifier in the form IAM deny policies expect. Deny policies
+    name a service account by its email, not by its numeric unique id — the
+    id is rejected with INVALID_PRINCIPAL, which reads like the account does
+    not exist rather than like the wrong field was used.
+  EOT
+  value       = "principal://iam.googleapis.com/projects/-/serviceAccounts/${google_service_account.spoke.email}"
 }
