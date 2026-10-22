@@ -222,9 +222,22 @@ Two roles, granted to the group on `stg` and `prd`:
 | Role | What it allows |
 |---|---|
 | read-only | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
-| server-access | an IAP tunnel to the one API instance, and nothing else |
+| server-access | an IAP tunnel to the one API instance, and a shell on it through OS Login |
 
-Stopping an instance, changing anything, or reading a secret value is refused.
+With read-only alone, stopping an instance, changing anything, or reading a secret value
+is refused.
+
+**server-access is the higher-trust grant of the two, which is why it is granted and
+audited separately.** A shell on the box is the box's identity: from inside, the metadata
+server hands out a token for `medusa-<env>-vm`, and that identity reads the tunnel-token
+secret — it has to, because it reads the token at boot to start the connector. So anyone
+with server-access can reach that one value, and the deny policy does not stop them,
+because the deny names the person and the caller here is the VM.
+
+This is a property of giving a human a shell, not of the IAM grants: the same person can
+read the token out of the running connector's own configuration. Grant server-access to
+people you would trust with that one Cloudflare credential, and keep read-only as the
+daily role for everyone else.
 
 ## Pipelines
 

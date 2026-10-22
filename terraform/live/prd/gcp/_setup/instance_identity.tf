@@ -29,6 +29,15 @@ resource "google_service_account_iam_member" "apply_attaches_instance" {
 # iam.serviceAccounts.actAs on every connection, so without this the IAP
 # tunnel opens and the shell is still refused — a failure that reads like the
 # tunnel is broken rather than like a missing grant on the VM's identity.
+#
+# This is what makes server-access the higher-trust of the two developer
+# roles. A shell on the box is the box's identity: the metadata server hands
+# out a token for this account, and this account reads the tunnel-token secret
+# because it needs it at boot. The deny policy on the group does not reach
+# that path — it names the person, and the caller is the VM. Removing this
+# grant would not close it either, since a shell can read the token out of the
+# running connector. It is documented in the README rather than pretended
+# away.
 resource "google_service_account_iam_member" "developers_act_as_instance" {
   service_account_id = google_service_account.instance.name
   role               = "roles/iam.serviceAccountUser"
