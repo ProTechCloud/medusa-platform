@@ -25,6 +25,18 @@ resource "google_storage_bucket_iam_member" "spokes_read_management" {
   }
 }
 
+# Same reason as the Cloudflare identities: the backend lists the bucket on
+# init, listing is a bucket-level operation, and a prefix condition cannot
+# express it. Names only — the conditioned grant above is what controls which
+# objects can actually be read.
+resource "google_storage_bucket_iam_member" "spokes_list_management" {
+  for_each = toset(local.env_spokes)
+
+  bucket = var.management_state_bucket
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${each.value}"
+}
+
 resource "google_kms_crypto_key_iam_member" "spokes_decrypt_management" {
   for_each = toset(local.env_spokes)
 

@@ -24,6 +24,25 @@ resource "google_storage_bucket_iam_member" "cloudflare_state" {
   }
 }
 
+# Listing is a bucket operation, not an object one, so the prefix condition
+# above cannot cover it — and Terraform's GCS backend lists the bucket on init
+# to enumerate workspaces. Without this the identity can read its own state
+# but cannot discover that it exists, and init fails before any plan runs.
+#
+# legacyBucketReader is the smallest predefined role that carries
+# storage.objects.list. It exposes object *names* across the bucket, which
+# reveals the layout of the stacks and nothing about their contents.
+resource "google_storage_bucket_iam_member" "cloudflare_state_list" {
+  for_each = merge(
+    { for env, sa in google_service_account.cloudflare_plan : "plan-${env}" => sa.email },
+    { for env, sa in google_service_account.cloudflare_apply : "apply-${env}" => sa.email },
+  )
+
+  bucket = module.management_state.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${each.value}"
+}
+
 # Reading an object from a CMEK bucket decrypts with the key, which is a
 # separate permission from reading the object.
 resource "google_kms_crypto_key_iam_member" "cloudflare_state_key" {
