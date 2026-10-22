@@ -172,7 +172,10 @@ jobs:
               summary,
               notice,
               '',
-              '<details><summary>Full plan</summary>',
+              // open: the diff is the thing a reviewer came to read. Collapsed by
+            // default, approving without expanding it is one click, and the
+            // plan comment stops being a gate and becomes decoration.
+            '<details open><summary>Full plan</summary>',
               '',
               '```terraform',
               plan,

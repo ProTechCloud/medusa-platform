@@ -161,7 +161,10 @@ jobs:
               ? `**${m[1]}** to add · **${m[2]}** to change · **${m[3]}** to destroy`
               : (/No changes/.test(plan) ? '**No changes.**' : '_Counts unavailable — see the log._')
             const body = [marker, `### Plan ${process.env.STACK} (cloudflare)`, '', summary, notice, '',
-              '<details><summary>Full plan</summary>', '', '```terraform', plan, '```', '', '</details>'].join('\n')
+              // open: the diff is the thing a reviewer came to read. Collapsed by
+            // default, approving without expanding it is one click, and the
+            // plan comment stops being a gate and becomes decoration.
+            '<details open><summary>Full plan</summary>', '', '```terraform', plan, '```', '', '</details>'].join('\n')
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
