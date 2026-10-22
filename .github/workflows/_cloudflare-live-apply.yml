@@ -16,10 +16,6 @@ on:
       state_bucket:
         required: true
         type: string
-      environment_state_bucket:
-        required: false
-        type: string
-        default: ""
       service_account:
         required: true
         type: string

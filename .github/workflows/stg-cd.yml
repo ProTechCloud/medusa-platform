@@ -46,7 +46,6 @@ jobs:
       gh_environment: stg
       root: terraform/live/stg/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      environment_state_bucket: ${{ vars.STATE_BUCKET_STG }}
       service_account: ${{ vars.CF_APPLY_SA_STG }}
       workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
@@ -129,9 +128,21 @@ jobs:
             exit 1
           fi
 
+          # `// empty` and the guard below, for the same reason as the tunnel
+          # lookup above: on a failed call `.result` is null, `jq -r` prints
+          # the string "null", and that would be written as the latest version
+          # of the secret. The VM reads versions/latest at boot, so cloudflared
+          # would then fail with a token error and nothing would point at the
+          # API call that caused it. Masking "null" also hides every later null
+          # in the log.
           value=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/cfd_tunnel/$tunnel/token" \
-            | jq -r '.result')
+            | jq -r 'if .success then (.result // empty) else empty end')
+
+          if [ -z "$value" ]; then
+            echo "::error::Cloudflare did not return a tunnel token for medusa-stg. The secret was left untouched."
+            exit 1
+          fi
           echo "::add-mask::$value"
 
           # Through stdin, never an argument: arguments show up in process

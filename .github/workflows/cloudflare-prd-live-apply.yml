@@ -19,7 +19,6 @@ jobs:
       gh_environment: prd
       root: terraform/live/prd/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      environment_state_bucket: ${{ vars.STATE_BUCKET_PRD }}
       service_account: ${{ vars.CF_APPLY_SA_PRD }}
       workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}

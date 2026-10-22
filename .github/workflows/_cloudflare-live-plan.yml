@@ -14,11 +14,6 @@ on:
         description: Management bucket. Cloudflare state is not environment workload state.
         required: true
         type: string
-      environment_state_bucket:
-        description: Environment bucket this stack reads the app port from. Empty for org.
-        required: false
-        type: string
-        default: ""
       service_account:
         required: true
         type: string

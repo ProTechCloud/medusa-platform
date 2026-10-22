@@ -73,7 +73,6 @@ jobs:
       stack: org
       root: terraform/live/org/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      environment_state_bucket: ""
       service_account: ${{ vars.CF_PLAN_SA_ORG }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
@@ -93,7 +92,6 @@ jobs:
       stack: stg
       root: terraform/live/stg/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      environment_state_bucket: "${{ vars.STATE_BUCKET_STG }}"
       service_account: ${{ vars.CF_PLAN_SA_STG }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
@@ -113,7 +111,6 @@ jobs:
       stack: prd
       root: terraform/live/prd/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      environment_state_bucket: "${{ vars.STATE_BUCKET_PRD }}"
       service_account: ${{ vars.CF_PLAN_SA_PRD }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
@@ -136,7 +133,14 @@ jobs:
     steps:
       # A stack that was not touched uploaded nothing, so a missing artifact
       # is the signal that there is nothing to report for it.
+      #
+      # continue-on-error because the action fails the step when the pattern
+      # matches nothing at all — which is the ordinary case for a docs-only
+      # pull request. Without it this job goes red there, and the script that
+      # deletes the stale comment never runs. The script already reads a
+      # missing file as "not touched", so there is nothing else to handle.
       - name: Collect the plans
+        continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: plan-*

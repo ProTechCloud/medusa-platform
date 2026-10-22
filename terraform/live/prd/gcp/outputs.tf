@@ -3,7 +3,7 @@ output "instance_name" {
 }
 
 output "app_port" {
-  description = "Read by the Cloudflare root to build the tunnel's ingress rule."
+  description = "The port the tunnel's ingress rule must point at. Passed to the Cloudflare root as a variable, not read from this state — which is why that root needs no access to this bucket."
   value       = var.app_port
 }
 
