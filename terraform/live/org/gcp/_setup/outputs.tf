@@ -67,3 +67,8 @@ output "cloudflare_plan_identities" {
 output "cloudflare_apply_identities" {
   value = { for k, sa in google_service_account.cloudflare_apply : k => sa.email }
 }
+
+output "developer_group" {
+  description = "The developer group, as `group:address`. The workload roots read it from here to grant the IAP tunnel on the instance; the value itself is in git-ignored tfvars, so this output is the only path it travels."
+  value       = var.developer_group
+}

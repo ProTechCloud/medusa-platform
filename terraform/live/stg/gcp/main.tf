@@ -69,3 +69,31 @@ resource "google_compute_instance_iam_member" "deploy_rolls_out" {
   role          = "roles/compute.instanceAdmin.v1"
   member        = "serviceAccount:${local.setup.deploy_spoke}"
 }
+
+# ---------- the IAP tunnel, bound on the instance ----------
+# Bound here and not in _setup for one reason: this is the root that creates
+# the VM, so this is the only place that can name it. `instance` takes the
+# name, not the numeric id, and referencing the resource means Terraform
+# rewrites the binding whenever the VM is replaced.
+#
+# Binding on the instance is what makes the grant true to its description: a
+# second VM in this zone is not reachable through it. A project-level grant
+# conditioned on the zone would cover every instance there.
+resource "google_iap_tunnel_instance_iam_member" "developers_tunnel" {
+  project  = var.project_id
+  zone     = var.zone
+  instance = module.api.instance_name
+  role     = "roles/iap.tunnelResourceAccessor"
+  member   = local.setup.developer_group
+}
+
+# The deploy reaches port 22 through the same tunnel, on the same one
+# instance. Its sudo rights are project-level and stay in _setup; what it may
+# point them at is this.
+resource "google_iap_tunnel_instance_iam_member" "deploy_tunnels" {
+  project  = var.project_id
+  zone     = var.zone
+  instance = module.api.instance_name
+  role     = "roles/iap.tunnelResourceAccessor"
+  member   = "serviceAccount:${local.setup.deploy_spoke}"
+}

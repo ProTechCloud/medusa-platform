@@ -74,9 +74,3 @@ variable "apis" {
     "cloudresourcemanager.googleapis.com",
   ]
 }
-
-variable "zone" {
-  description = "Zone the API instance runs in. Needed here because the developer IAP grant is conditioned on that one instance, and the condition is written before the instance exists."
-  type        = string
-  default     = "us-central1-a"
-}

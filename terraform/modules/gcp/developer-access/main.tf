@@ -30,33 +30,18 @@ resource "google_iam_deny_policy" "no_secret_values" {
 # ---------- role 2: server-access ----------
 # Granted separately so it can be given to some people and not others, and so
 # revoking shell access does not also remove the ability to read dashboards.
-
-# The tunnel itself, narrowed to one instance. Without the condition this
-# would cover every current and future instance in the project.
-resource "google_project_iam_member" "iap_tunnel" {
-  project = var.project_id
-  role    = "roles/iap.tunnelResourceAccessor"
-  member  = var.group
-
-  # IAP names its resources on its own path, with the project NUMBER and the
-  # instance's numeric id — not the Compute path with the project id and the
-  # instance name. A condition written in the Compute form matches nothing, so
-  # the grant silently allows no tunnel at all.
-  #
-  # The numeric instance id is unknown here: this root runs before the VM
-  # exists, and the id changes whenever the VM is replaced. The condition
-  # therefore pins everything up to the zone. One zone holds one API instance
-  # by design; a second VM added there would be reachable, which is the cost
-  # of not being able to name the instance in advance.
-  condition {
-    title      = "only instances in the api zone"
-    expression = "resource.name.startsWith('projects/${var.project_number}/iap_tunnel/zones/${var.zone}/instances/')"
-  }
-}
-
-# Reaching the port is not the same as being let in. OS Login makes the shell
-# itself an IAM decision, so removing someone from the group closes their
-# session path without touching any key file on the box.
+#
+# Only half of it is here. The tunnel itself is granted on the instance, by
+# `google_iap_tunnel_instance_iam_member` in the workload root — the root that
+# creates the VM and so can name it. Binding on the instance is what keeps a
+# second VM in the same zone out of reach; a project-level grant, conditional
+# or not, cannot do that from here, because this root runs before any VM
+# exists.
+#
+# OS Login is project-level and belongs here: reaching the port is not the
+# same as being let in. It makes the shell itself an IAM decision, so removing
+# someone from the group closes their session path without touching any key
+# file on the box.
 resource "google_project_iam_member" "os_login" {
   project = var.project_id
   role    = "roles/compute.osLogin"

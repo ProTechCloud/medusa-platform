@@ -34,3 +34,8 @@ output "instance_service_account" {
   description = "Identity the VM runs as. Created here so the apply spoke never needs serviceAccountAdmin."
   value       = google_service_account.instance.email
 }
+
+output "developer_group" {
+  description = "Relayed from org. The workload root grants this group the IAP tunnel on the API instance, which is the only place that binding can name the VM."
+  value       = local.developer_group
+}

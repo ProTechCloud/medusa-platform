@@ -26,6 +26,27 @@ resource "google_kms_crypto_key_iam_member" "plan_state_key" {
   member        = module.plan_spoke.member
 }
 
+# Refreshing an IAP tunnel binding needs iap.tunnelInstances.getIamPolicy, and
+# that permission sits only in roles/iap.admin and roles/iap.settingsAdmin —
+# both of which can also write. roles/viewer does not carry it, so without
+# this the first plan after the tunnel grants are applied fails on refresh.
+#
+# A custom role with the one permission keeps plan read-only. getIamPolicy
+# reads an access rule; it does not read a secret and it grants no tunnel.
+resource "google_project_iam_custom_role" "iap_policy_reader" {
+  project     = var.project_id
+  role_id     = "medusaIapPolicyReader"
+  title       = "Medusa IAP policy reader"
+  description = "Read the IAM policy of an IAP tunnel instance. Held by the plan spoke so refresh works without granting write."
+  permissions = ["iap.tunnelInstances.getIamPolicy"]
+}
+
+resource "google_project_iam_member" "plan_reads_iap_policy" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.iap_policy_reader.id
+  member  = module.plan_spoke.member
+}
+
 # ---------- apply: changes infrastructure, not itself ----------
 module "apply_spoke" {
   source = "../../../../modules/gcp/wif-spoke"
@@ -100,18 +121,12 @@ module "deploy_spoke" {
   hub_member  = local.backend_deploy_hub
 
   roles = [
-    # Reaching port 22 without a public firewall rule. Narrowed to the one
-    # instance, so a second VM added later is not reachable by the deploy.
-    {
-      role  = "roles/iap.tunnelResourceAccessor"
-      title = "only instances in the api zone"
-      # IAP's own resource path, with the project number — the Compute path
-      # matches nothing here. The instance's numeric id is not knowable before
-      # the VM exists, so the condition stops at the zone.
-      expression = "resource.name.startsWith('projects/${data.google_project.this.number}/iap_tunnel/zones/${var.zone}/instances/')"
-    },
     # osAdminLogin rather than osLogin: the rollout runs a script with sudo,
     # and plain osLogin lands on the box without it.
+    #
+    # The tunnel grant is not here. It is bound on the instance, in the
+    # workload root, so a second VM in this zone is not reachable by the
+    # deploy — see `deploy_tunnels` there.
     { role = "roles/compute.osAdminLogin" },
   ]
 }

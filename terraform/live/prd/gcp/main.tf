@@ -49,3 +49,23 @@ module "api" {
   artifact_registry_name     = module.registry.name
   artifact_registry_location = module.registry.location
 }
+
+# ---------- the IAP tunnel, bound on the instance ----------
+# Bound here and not in _setup for one reason: this is the root that creates
+# the VM, so this is the only place that can name it. `instance` takes the
+# name, not the numeric id, and referencing the resource means Terraform
+# rewrites the binding whenever the VM is replaced.
+#
+# Binding on the instance is what makes the grant true to its description: a
+# second VM in this zone is not reachable through it. A project-level grant
+# conditioned on the zone would cover every instance there.
+#
+# No deploy binding here: the application deploys to stg and nowhere else, so
+# prd has no deploy spoke to grant.
+resource "google_iap_tunnel_instance_iam_member" "developers_tunnel" {
+  project  = var.project_id
+  zone     = var.zone
+  instance = module.api.instance_name
+  role     = "roles/iap.tunnelResourceAccessor"
+  member   = local.setup.developer_group
+}

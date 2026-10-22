@@ -22,9 +22,3 @@ variable "management_project_id" {
   description = "Where the bootstrap admin lives. Named so the project pin accepts it applying this root."
   type        = string
 }
-
-variable "zone" {
-  description = "Zone the API instance runs in. Part of the IAP tunnel resource path."
-  type        = string
-  default     = "us-central1-a"
-}
