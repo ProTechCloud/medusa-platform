@@ -51,9 +51,9 @@ output "apply_hubs" {
   value = { for k, m in module.apply_hub : k => m.email }
 }
 
-output "tunnel_token_hub" {
-  description = "Hub the stg-cd tunnel-token step federates to."
-  value       = module.tunnel_token_hub.email
+output "tunnel_token_hubs" {
+  description = "Tunnel-token hub per environment. Separate hubs: a shared one would let one environment's deploy write another's secret."
+  value       = { for k, m in module.tunnel_token_hub : k => m.email }
 }
 
 output "backend_deploy_hub" {

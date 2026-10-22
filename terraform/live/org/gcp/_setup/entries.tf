@@ -14,6 +14,7 @@ locals {
     cloudflare_apply = ".github/workflows/_cloudflare-live-apply.yml"
     backend_deploy   = ".github/workflows/deploy-stg.yml"
     stg_cd           = ".github/workflows/stg-cd.yml"
+    prd_cd           = ".github/workflows/prd-cd.yml"
   }
 
   # job_workflow_ref's path component is owner/repo/path, and the provider
@@ -54,7 +55,19 @@ locals {
   # the apply hub would fail the exchange: that hub trusts _gcp-live-apply.yml
   # and nothing else. It gets a hub of its own, which also keeps the rule that
   # a hub grants exactly one thing.
-  tunnel_token_entries = ["${local.platform_repo}|${local.wf.stg_cd}|stg|refs/heads/dev"]
+  # One per environment, like every other hub. A single shared hub would mean
+  # prd's writer trusts a claim that names stg-cd.yml — so a stg deploy could
+  # become prd's writer and overwrite production's tunnel secret. That is the
+  # cross-environment path the whole design exists to prevent, and it appears
+  # the moment two environments share one hub.
+  #
+  # prd names a workflow that does not exist yet: prd is planned and never
+  # applied, so nothing matches this entry today. The trust is inert until
+  # someone adds prd-cd.yml, and symmetric in the meantime.
+  tunnel_token_entries = {
+    stg = ["${local.platform_repo}|${local.wf.stg_cd}|stg|refs/heads/dev"]
+    prd = ["${local.platform_repo}|${local.wf.prd_cd}|prd|refs/heads/dev"]
+  }
 
   # The application repository deploys from its own branch, not from dev.
   backend_deploy_entries = ["${local.backend_repo}|${local.wf.backend_deploy}|stg|refs/heads/stg"]

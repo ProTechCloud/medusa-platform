@@ -44,15 +44,16 @@ module "backend_deploy_hub" {
 }
 
 module "tunnel_token_hub" {
-  source = "../../../../modules/gcp/wif-hub"
+  for_each = local.tunnel_token_entries
+  source   = "../../../../modules/gcp/wif-hub"
 
   project_id  = var.management_project_id
-  name        = "medusa-stg-tunnel-token-hub"
-  description = "Entry point for the stg-cd step that writes the tunnel token"
+  name        = "medusa-${each.key}-tunnel-token-hub"
+  description = "Entry point for the ${each.key} deploy step that writes the tunnel token"
 
   pool_name      = google_iam_workload_identity_pool.github.name
   attribute      = "apply_entry"
-  allowed_values = local.tunnel_token_entries
+  allowed_values = each.value
 }
 
 # ---------- Cloudflare: identities that only reach state ----------
