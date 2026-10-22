@@ -1,0 +1,289 @@
+# Every stack's plan, in one run, reported as one comment.
+#
+# One caller rather than five, because the comment has to be one comment: a
+# job can only write the section it produced, and five jobs editing a shared
+# comment in parallel overwrite each other. Collecting the plans as artifacts
+# and rendering them once, after all five finish, is what makes a single
+# comment possible at all.
+#
+# No path filter on the trigger. GitHub treats a required check that never ran
+# as passed, so filtering here would turn "nothing to plan" into "protection
+# satisfied". Each plan job decides for itself whether there is work.
+name: live-plan
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions: {}
+
+jobs:
+  # Queued per environment and pull request, never cancelled: an interrupted
+  # plan leaves the state lock held and stalls the next run. The group is on
+  # each job, not on the workflow, so stg's queue does not hold up prd's.
+  gcp-stg:
+    name: Plan stg
+    uses: ./.github/workflows/_gcp-live-plan.yml
+    concurrency:
+      group: plan-gcp-stg-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    with:
+      environment: stg
+      root: terraform/live/stg/gcp
+      project_id: ${{ vars.GCP_PROJECT_STG }}
+      state_bucket: ${{ vars.STATE_BUCKET_STG }}
+      management_state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      spoke_service_account: ${{ vars.GCP_PLAN_SPOKE_STG }}
+      service_account: ${{ vars.GCP_PLAN_HUB_STG }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    permissions:
+      contents: read
+      id-token: write
+
+  gcp-prd:
+    name: Plan prd
+    uses: ./.github/workflows/_gcp-live-plan.yml
+    concurrency:
+      group: plan-gcp-prd-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    with:
+      environment: prd
+      root: terraform/live/prd/gcp
+      project_id: ${{ vars.GCP_PROJECT_PRD }}
+      state_bucket: ${{ vars.STATE_BUCKET_PRD }}
+      management_state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      spoke_service_account: ${{ vars.GCP_PLAN_SPOKE_PRD }}
+      service_account: ${{ vars.GCP_PLAN_HUB_PRD }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    permissions:
+      contents: read
+      id-token: write
+
+  cloudflare-org:
+    name: Plan org cloudflare
+    uses: ./.github/workflows/_cloudflare-live-plan.yml
+    concurrency:
+      group: plan-cloudflare-org-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    with:
+      stack: org
+      root: terraform/live/org/cloudflare
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      environment_state_bucket: ""
+      service_account: ${{ vars.CF_PLAN_SA_ORG }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      CLOUDFLARE_PLAN_TOKEN: ${{ secrets.CLOUDFLARE_PLAN_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
+
+  cloudflare-stg:
+    name: Plan stg cloudflare
+    uses: ./.github/workflows/_cloudflare-live-plan.yml
+    concurrency:
+      group: plan-cloudflare-stg-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    with:
+      stack: stg
+      root: terraform/live/stg/cloudflare
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      environment_state_bucket: "${{ vars.STATE_BUCKET_STG }}"
+      service_account: ${{ vars.CF_PLAN_SA_STG }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      CLOUDFLARE_PLAN_TOKEN: ${{ secrets.CLOUDFLARE_PLAN_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
+
+  cloudflare-prd:
+    name: Plan prd cloudflare
+    uses: ./.github/workflows/_cloudflare-live-plan.yml
+    concurrency:
+      group: plan-cloudflare-prd-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    with:
+      stack: prd
+      root: terraform/live/prd/cloudflare
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      environment_state_bucket: "${{ vars.STATE_BUCKET_PRD }}"
+      service_account: ${{ vars.CF_PLAN_SA_PRD }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      CLOUDFLARE_PLAN_TOKEN: ${{ secrets.CLOUDFLARE_PLAN_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
+
+  # The only job that may write to the pull request. It runs even when a plan
+  # failed, so a red stack is named in the comment instead of silently absent.
+  plan-comment:
+    name: Plan comment
+    needs: [gcp-stg, gcp-prd, cloudflare-org, cloudflare-stg, cloudflare-prd]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # A stack that was not touched uploaded nothing, so a missing artifact
+      # is the signal that there is nothing to report for it.
+      - name: Collect the plans
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: plan-*
+          path: plans
+
+      - name: One comment for every stack
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const fs = require('fs')
+            const path = require('path')
+
+            const MARKER = '<!-- medusa-plan -->'
+            // A GitHub comment body caps at 65536 characters. The plans share
+            // this much of it; the rest is headings and scaffolding. Cutting
+            // here rather than per stack is the point — five sections each cut
+            // at 60k would be rejected by the API as one oversized comment.
+            const BUDGET = 55000
+
+            // Also the authoritative list of stacks, and the order they are
+            // read in: environments first, then the edge.
+            const STACKS = [
+              'gcp-stg', 'gcp-prd',
+              'cloudflare-org', 'cloudflare-stg', 'cloudflare-prd',
+            ]
+            const label = key => {
+              const [provider, env] = key.split('-')
+              return `${env} (${provider})`
+            }
+
+            const results = JSON.parse(process.env.RESULTS)
+            const read = key => {
+              const file = path.join('plans', `plan-${key}`, 'plan.txt')
+              return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null
+            }
+
+            // Three states per stack: it planned, it failed, or it was not
+            // touched. Only the last one means "say nothing".
+            const sections = []
+            for (const key of STACKS) {
+              const plan = read(key)
+              if (plan !== null) {
+                sections.push({ key, plan })
+              } else if (results[key] && results[key].result === 'failure') {
+                sections.push({ key, plan: null })
+              }
+            }
+
+            if (sections.length === 0) {
+              core.info('no stack in scope — the comment should not exist')
+            }
+
+            // Give every section what it needs, smallest first, and let the
+            // unused share flow to the ones that are too long. Splitting the
+            // budget evenly would truncate a large plan while a one-line
+            // "No changes." section sat on an unused 11k.
+            const planned = sections.filter(s => s.plan !== null)
+            const order = planned.map((s, i) => i)
+              .sort((a, b) => planned[a].plan.length - planned[b].plan.length)
+            let left = BUDGET
+            let share = order.length
+            for (const i of order) {
+              const allowance = Math.floor(left / share)
+              const take = Math.min(planned[i].plan.length, allowance)
+              planned[i].allowance = take
+              left -= take
+              share -= 1
+            }
+
+            const render = s => {
+              if (s.plan === null) {
+                return [`### ${label(s.key)}`, '', '**The plan failed.** Read the job log.', '']
+              }
+              let plan = s.plan
+              let notice = ''
+              if (plan.length > s.allowance) {
+                plan = plan.slice(0, s.allowance)
+                notice = `\n> Output cut. Read the full plan in the job log.`
+              }
+              const m = plan.match(/Plan: (\d+) to add, (\d+) to change, (\d+) to destroy/)
+              const summary = m
+                ? `**${m[1]}** to add · **${m[2]}** to change · **${m[3]}** to destroy`
+                : (/No changes/.test(plan) ? '**No changes.**' : '_Counts unavailable — see the log._')
+              return [
+                `### ${label(s.key)}`,
+                '',
+                summary,
+                notice,
+                '',
+                // open: the diff is the thing a reviewer came to read.
+                // Collapsed by default, approving without expanding it is one
+                // click, and the comment stops being a gate and becomes
+                // decoration.
+                '<details open><summary>Full plan</summary>',
+                '',
+                '```terraform',
+                plan,
+                '```',
+                '',
+                '</details>',
+                '',
+              ]
+            }
+
+            const body = [MARKER, '## Terraform plan', '']
+              .concat(...sections.map(render))
+              .join('\n')
+
+            // Paginated on purpose. One page of 100 was the bug this replaces:
+            // past that, bot reviews push the marker off the first page, the
+            // upsert finds nothing, and every push adds another comment.
+            const issue = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            }
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { ...issue, per_page: 100 },
+            )
+            const mine = c => c.user.type === 'Bot' && c.body.includes(MARKER)
+            const existing = comments.find(mine)
+
+            if (sections.length === 0) {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: issue.owner, repo: issue.repo, comment_id: existing.id,
+                })
+              }
+            } else if (existing) {
+              await github.rest.issues.updateComment({
+                owner: issue.owner, repo: issue.repo, comment_id: existing.id, body,
+              })
+            } else {
+              await github.rest.issues.createComment({ ...issue, body })
+            }
+
+            // One comment per stack is what this workflow replaced. Clearing
+            // the old ones here means the change takes effect on the pull
+            // request that introduces it, rather than leaving five orphans
+            // nothing will ever update again.
+            const legacy = comments.filter(
+              c => c.user.type === 'Bot' && c.body.includes('<!-- medusa-plan:'),
+            )
+            for (const c of legacy) {
+              await github.rest.issues.deleteComment({
+                owner: issue.owner, repo: issue.repo, comment_id: c.id,
+              })
+            }

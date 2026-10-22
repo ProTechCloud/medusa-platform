@@ -222,8 +222,7 @@ Stopping an instance, changing anything, or reading a secret value is refused.
 
 | Workflow | When | What |
 |---|---|---|
-| `gcp-{stg,prd}-live-plan` | every PR | always reports; deletes its comment when the stack is untouched |
-| `cloudflare-{org,stg,prd}-live-plan` | PRs touching that stack | — |
+| `live-plan` | every PR | plans all five stacks; `Plan stg` and `Plan prd` always report, Cloudflare stacks only when touched. One comment, a section per stack, deleted when no stack is touched |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks → **Code Quality Summary** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare |

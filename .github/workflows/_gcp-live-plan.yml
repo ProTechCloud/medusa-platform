@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       environment:
-        description: Environment being planned, used in the comment heading.
+        description: Environment being planned. Also names the plan artifact.
         required: true
         type: string
       root:
@@ -38,14 +38,16 @@ on:
         required: true
         type: string
 
+# No pull-requests: write. This workflow runs on unreviewed pull-request code
+# and does not comment — the aggregating job in live-plan.yml does, from the
+# artifacts collected here. Five jobs editing one comment in parallel would
+# overwrite each other's sections anyway.
 permissions:
   contents: read
-  pull-requests: write
   id-token: write
 
 env:
   TERRAFORM_VERSION: 1.16.6
-  PLAN_MARKER: "<!-- medusa-plan:${{ inputs.environment }}/gcp -->"
 
 jobs:
   plan:
@@ -61,7 +63,8 @@ jobs:
 
       # A plan that is skipped reports as passed to branch protection, so the
       # job always runs and decides for itself whether there is work. When
-      # there is none it removes its stale comment and succeeds.
+      # there is none it uploads nothing and succeeds; the aggregating job
+      # reads the absence of an artifact as "this stack was not touched".
       - name: Does this PR touch the stack?
         id: scope
         shell: bash
@@ -80,30 +83,6 @@ jobs:
             echo "relevant=false" >> "$GITHUB_OUTPUT"
             echo "no change under ${{ inputs.root }}/ or terraform/modules/"
           fi
-
-      - name: Remove stale plan comment
-        if: steps.scope.outputs.relevant == 'false' && github.event_name == 'pull_request'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          MARKER: ${{ env.PLAN_MARKER }}
-        with:
-          script: |
-            // Paginated: one page of 100 missed the marker on a long pull
-            // request, so every push added another comment instead of
-            // editing the one already there.
-            const comments = await github.paginate(
-              github.rest.issues.listComments, {
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 100,
-              },
-            )
-            for (const c of comments.filter(c => c.body.includes(process.env.MARKER))) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner, repo: context.repo.repo, comment_id: c.id,
-              })
-            }
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         if: steps.scope.outputs.relevant == 'true'
@@ -143,75 +122,14 @@ jobs:
           set -o pipefail
           terraform plan -no-color -input=false -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
 
-      # One comment per stack, updated in place. A new comment per push buries
-      # the review conversation under plan output within a few iterations.
-      - name: Comment the plan
-        if: steps.scope.outputs.relevant == 'true' && github.event_name == 'pull_request'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          MARKER: ${{ env.PLAN_MARKER }}
-          ROOT: ${{ inputs.root }}
-          STACK: ${{ inputs.environment }}
+      # The plan text travels as an artifact, not as a comment. Naming it
+      # after the stack is what lets the aggregator label each section and
+      # tell a stack that was skipped from one that failed.
+      - name: Upload the plan
+        if: steps.scope.outputs.relevant == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          script: |
-            const fs = require('fs')
-            const marker = process.env.MARKER
-            const limit = 60000
-
-            let plan = fs.readFileSync(`${process.env.ROOT}/plan.txt`, 'utf8')
-            let notice = ''
-            if (plan.length > limit) {
-              notice = `\n> Output cut at ${limit} characters. Read the full plan in the job log.`
-              plan = plan.slice(0, limit)
-            }
-
-            const m = plan.match(/Plan: (\d+) to add, (\d+) to change, (\d+) to destroy/)
-            const summary = m
-              ? `**${m[1]}** to add · **${m[2]}** to change · **${m[3]}** to destroy`
-              : (/No changes/.test(plan) ? '**No changes.**' : '_Counts unavailable — see the log._')
-
-            const body = [
-              marker,
-              `### Plan ${process.env.STACK} (gcp)`,
-              '',
-              summary,
-              notice,
-              '',
-              // open: the diff is the thing a reviewer came to read. Collapsed by
-            // default, approving without expanding it is one click, and the
-            // plan comment stops being a gate and becomes decoration.
-            '<details open><summary>Full plan</summary>',
-              '',
-              '```terraform',
-              plan,
-              '```',
-              '',
-              '</details>',
-            ].join('\n')
-
-            // Paginated: one page of 100 missed the marker on a long pull
-            // request, so every push added another comment instead of
-            // editing the one already there.
-            const comments = await github.paginate(
-              github.rest.issues.listComments, {
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 100,
-              },
-            )
-            const existing = comments.find(
-              c => c.user.type === 'Bot' && c.body.includes(marker),
-            )
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body,
-              })
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner, repo: context.repo.repo, body,
-              })
-            }
+          name: plan-gcp-${{ inputs.environment }}
+          path: ${{ inputs.root }}/plan.txt
+          retention-days: 5
+          if-no-files-found: error
