@@ -34,7 +34,16 @@ resource "google_iam_workload_identity_pool_provider" "plan" {
   attribute_condition = "assertion.repository == '${local.platform_repo}'"
 
   attribute_mapping = {
-    "google.subject" = "assertion.sub"
+    # The subject is what GCP records as the caller in the audit log, so the
+    # run belongs in it: a GenerateAccessToken entry then points at the exact
+    # workflow run that caused it. The auth action has no input for this — the
+    # mapping here is the only place it can be set.
+    #
+    # Safe to change: the hub bindings in hubs.tf match on attribute.plan_entry
+    # and attribute.apply_entry, never on the subject, so widening this does
+    # not alter who may sign in. Capped at 127 bytes, which `sub` plus a run id
+    # stays well inside.
+    "google.subject" = "assertion.sub + '|run:' + assertion.run_id + '.' + assertion.run_attempt"
 
     # job_workflow_ref carries the reusable workflow that actually runs the
     # job, as path@ref. workflow_ref would carry the *caller* instead, which
@@ -66,7 +75,8 @@ resource "google_iam_workload_identity_pool_provider" "apply" {
   attribute_condition = "assertion.repository in ['${local.platform_repo}', '${local.backend_repo}']"
 
   attribute_mapping = {
-    "google.subject" = "assertion.sub"
+    # Carries the run, as above: the audit entry names the run that caused it.
+    "google.subject" = "assertion.sub + '|run:' + assertion.run_id + '.' + assertion.run_attempt"
 
     # The exact ref is kept here, unlike in the plan entry: every apply runs
     # from a branch, so it can be stated, and stating it is what stops an
