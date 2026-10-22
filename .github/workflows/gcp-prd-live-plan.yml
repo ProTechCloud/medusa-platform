@@ -1,0 +1,36 @@
+# Runs on every pull request, with no path filter on the trigger. GitHub
+# treats a required check that never ran as passed, so filtering here would
+# turn "nothing to plan" into "protection satisfied". The shared workflow
+# decides whether there is work and reports either way.
+name: gcp-prd-live-plan
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+# Queued per environment and pull request, never cancelled: an interrupted
+# plan leaves the state lock held and stalls the next run.
+concurrency:
+  group: plan-gcp-prd-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan prd
+    uses: ./.github/workflows/_gcp-live-plan.yml
+    with:
+      environment: prd
+      root: terraform/live/prd/gcp
+      project_id: ${{ vars.GCP_PROJECT_PRD }}
+      state_bucket: ${{ vars.STATE_BUCKET_PRD }}
+      management_state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      spoke_service_account: ${{ vars.GCP_PLAN_SPOKE_PRD }}
+      service_account: ${{ vars.GCP_PLAN_HUB_PRD }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
