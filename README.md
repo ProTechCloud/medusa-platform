@@ -198,22 +198,6 @@ The only value this repository writes into state is the literal string
 > cannot use `/`. The parts are kept and joined with `_`:
 > `medusa/stg/cloudflare/tunnel-token` → `medusa_stg_cloudflare_tunnel-token`.
 
-## Known limits
-
-Two things the standard asks for that this does not fully deliver, stated here
-rather than left to be discovered:
-
-- **The run id reaches Cloudflare session names, not GCP ones.** Every Cloudflare
-  token is named `medusa-<stack>-<run id>-<attempt>`, so a token in the audit log
-  points at the run that made it. GCP's federated session name derives from the
-  GitHub `sub` claim; the auth action exposes no input to change it, so a GCP
-  audit entry identifies the identity and the repository but not the run.
-- **The developer IAP grant stops at the zone, not the instance.** IAP addresses
-  instances by numeric id, which does not exist before the VM is created and
-  changes whenever it is replaced. The condition therefore covers every instance
-  in the API zone. One zone holds one instance by design; a second one added
-  there would be reachable.
-
 ## Developer access
 
 Sign in with your Google account. No keys are issued, to anyone, anywhere.
@@ -238,8 +222,7 @@ Stopping an instance, changing anything, or reading a secret value is refused.
 
 | Workflow | When | What |
 |---|---|---|
-| `gcp-{stg,prd}-live-plan` | every PR | always reports; deletes its comment when the stack is untouched |
-| `cloudflare-{org,stg,prd}-live-plan` | PRs touching that stack | — |
+| `live-plan` | every PR | plans all five stacks; `Plan stg` and `Plan prd` always report, Cloudflare stacks only when touched. One comment, a section per stack, deleted when no stack is touched |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks → **Code Quality Summary** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare |
