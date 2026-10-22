@@ -66,8 +66,13 @@ the foundation" is answerable and separable from day-to-day access.
 gcloud auth application-default login     # as the bootstrap admin
 ```
 
-It needs, at organization scope: `resourcemanager.projectCreator`,
-`resourcemanager.organizationAdmin`, and `billing.user` on the billing account.
+At organization scope it needs `resourcemanager.projectCreator`,
+`resourcemanager.projectIamAdmin`, `iam.denyAdmin` and `orgpolicy.policyAdmin`;
+`billing.user` on the billing account; and `owner` on the management project.
+
+`orgpolicy.policyAdmin` is the one people forget. Without it the apply fails
+only when it reaches the CMEK constraint, several minutes in, with a permission
+error that names the policy rather than the identity.
 
 ### 2. The management project and the developer group
 
