@@ -218,10 +218,14 @@ jobs:
                 plan = plan.slice(0, s.allowance)
                 notice = `\n> Output cut. Read the full plan in the job log.`
               }
-              const m = plan.match(/Plan: (\d+) to add, (\d+) to change, (\d+) to destroy/)
+              // Counted from the full plan, never from the truncated copy.
+              // Terraform prints `Plan: …` as its last line, so cutting the
+              // body removes exactly the summary a reviewer needs most — and
+              // a large plan is the case where the cut happens.
+              const m = s.plan.match(/Plan: (\d+) to add, (\d+) to change, (\d+) to destroy/)
               const summary = m
                 ? `**${m[1]}** to add · **${m[2]}** to change · **${m[3]}** to destroy`
-                : (/No changes/.test(plan) ? '**No changes.**' : '_Counts unavailable — see the log._')
+                : (/No changes/.test(s.plan) ? '**No changes.**' : '_Counts unavailable — see the log._')
               return [
                 `### ${label(s.key)}`,
                 '',

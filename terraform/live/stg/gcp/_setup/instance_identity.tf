@@ -34,3 +34,13 @@ resource "google_service_account_iam_member" "deploy_acts_as_instance" {
   role               = "roles/iam.serviceAccountUser"
   member             = module.deploy_spoke[0].member
 }
+
+# The developers need the same thing, on the same one account. OS Login checks
+# iam.serviceAccounts.actAs on every connection, so without this the IAP
+# tunnel opens and the shell is still refused — a failure that reads like the
+# tunnel is broken rather than like a missing grant on the VM's identity.
+resource "google_service_account_iam_member" "developers_act_as_instance" {
+  service_account_id = google_service_account.instance.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = local.developer_group
+}

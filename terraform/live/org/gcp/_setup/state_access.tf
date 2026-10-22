@@ -2,6 +2,22 @@
 # the only identities besides a person that touch it. objectAdmin rather than
 # objectCreator: Terraform must also be able to delete the lock object it
 # wrote, and a plan that cannot release its lock wedges the next run.
+
+locals {
+  # The exact object prefix each Cloudflare identity may touch, with the
+  # trailing slash: `stg/cloudflare` without it also matches a future
+  # `stg/cloudflare-anything`, so the match has to stop at a path segment.
+  #
+  # org is spelled out rather than derived. Its two roots sit side by side —
+  # org/cloudflare/live and org/cloudflare/setup — so a prefix of
+  # `org/cloudflare/` would hand the _setup state to these identities, and the
+  # plan one is reachable from pull-request code.
+  cloudflare_state_prefix = {
+    org = "org/cloudflare/live/"
+    stg = "stg/cloudflare/"
+    prd = "prd/cloudflare/"
+  }
+}
 resource "google_storage_bucket_iam_member" "cloudflare_state" {
   for_each = merge(
     { for env, sa in google_service_account.cloudflare_plan : "plan-${env}" => { email = sa.email, env = env } },
@@ -19,8 +35,8 @@ resource "google_storage_bucket_iam_member" "cloudflare_state" {
   # an unreviewed branch to tampering with the identity records themselves.
   condition {
     title       = "only this stack's state"
-    description = "Objects under ${each.value.env}/cloudflare/ and nothing else."
-    expression  = "resource.name.startsWith('projects/_/buckets/${module.management_state.name}/objects/${each.value.env}/cloudflare')"
+    description = "Objects under ${local.cloudflare_state_prefix[each.value.env]} and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${module.management_state.name}/objects/${local.cloudflare_state_prefix[each.value.env]}')"
   }
 }
 

@@ -97,11 +97,15 @@ managed in the group from then on, so adding or removing a developer is not a co
 Order matters: each reads the previous one's outputs through remote state.
 
 ```sh
+# Every cd below is from the repository root: 3a leaves the shell inside a
+# root, so a relative path in 3b would miss.
+repo="$(git rev-parse --show-toplevel)"
+
 # 3a. org/gcp/_setup — it creates the bucket its own state will live in, so
 #     the first apply has to run without a backend at all. `init -backend=false`
 #     does not do that: it skips backend *initialisation* and then refuses to
 #     apply. The declaration has to be out of the way.
-cd terraform/live/org/gcp/_setup
+cd "$repo/terraform/live/org/gcp/_setup"
 cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
 
 mv backend.tf backend.tf.off
@@ -116,10 +120,13 @@ terraform init -migrate-state \
 #     wants zone_id, the environment roots want project_id,
 #     management_project_id and management_state_bucket.
 for root in org/cloudflare/_setup stg/gcp/_setup prd/gcp/_setup; do
-  cd "terraform/live/$root"
-  cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
-  terraform init -backend-config="bucket=<management bucket>"
-  terraform apply
+  # A subshell, so each iteration starts from the repository root again.
+  (
+    cd "$repo/terraform/live/$root"
+    cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
+    terraform init -backend-config="bucket=<management bucket>"
+    terraform apply
+  ) || break
 done
 ```
 
@@ -158,7 +165,7 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
 
-One secret, and only one:
+Two secrets, and only two — both Cloudflare, because Cloudflare has no workload identity:
 
 | Secret | Scope | Why it is a secret |
 |---|---|---|
@@ -174,7 +181,8 @@ Terraform creates every secret with `REPLACE_ME_VIA_SECRET_MANAGER` and then ign
 value forever. Set the real ones by hand:
 
 ```sh
-gcloud secrets versions add medusa_stg_<domain>_<name> --data-file=-
+gcloud secrets versions add medusa_stg_<domain>_<name> \
+  --project=medusa-stg --data-file=-
 # paste the value, then press ctrl-D
 ```
 
@@ -222,7 +230,7 @@ Stopping an instance, changing anything, or reading a secret value is refused.
 
 | Workflow | When | What |
 |---|---|---|
-| `live-plan` | every PR | plans all five stacks; `Plan stg` and `Plan prd` always report, Cloudflare stacks only when touched. One comment, a section per stack, deleted when no stack is touched |
+| `live-plan` | every PR | plans all five stacks; `Plan stg` and `Plan prd` always report, Cloudflare stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks → **Code Quality Summary** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare |
