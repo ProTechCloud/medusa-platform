@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       stack:
-        description: org, stg or prd — used in the comment heading and the state prefix.
+        description: org, stg or prd — names the plan artifact and the state prefix.
         required: true
         type: string
       root:
@@ -32,14 +32,14 @@ on:
       CLOUDFLARE_PLAN_TOKEN:
         required: true
 
+# No pull-requests: write — see _gcp-live-plan.yml. The aggregating job in
+# live-plan.yml owns the comment.
 permissions:
   contents: read
-  pull-requests: write
   id-token: write
 
 env:
   TERRAFORM_VERSION: 1.16.6
-  PLAN_MARKER: "<!-- medusa-plan:${{ inputs.stack }}/cloudflare -->"
 
 jobs:
   plan:
@@ -67,23 +67,6 @@ jobs:
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Remove stale plan comment
-        if: steps.scope.outputs.relevant == 'false' && github.event_name == 'pull_request'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          MARKER: ${{ env.PLAN_MARKER }}
-        with:
-          script: |
-            const { data: comments } = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
-            })
-            for (const c of comments.filter(c => c.body.includes(process.env.MARKER))) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner, repo: context.repo.repo, comment_id: c.id,
-              })
-            }
 
       # Deliberately not the minting token.
       #
@@ -138,43 +121,11 @@ jobs:
           set -o pipefail
           terraform plan -no-color -input=false -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
 
-      - name: Comment the plan
-        if: steps.scope.outputs.relevant == 'true' && github.event_name == 'pull_request'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          MARKER: ${{ env.PLAN_MARKER }}
-          ROOT: ${{ inputs.root }}
-          STACK: ${{ inputs.stack }}
+      - name: Upload the plan
+        if: steps.scope.outputs.relevant == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          script: |
-            const fs = require('fs')
-            const marker = process.env.MARKER
-            const limit = 60000
-            let plan = fs.readFileSync(`${process.env.ROOT}/plan.txt`, 'utf8')
-            let notice = ''
-            if (plan.length > limit) {
-              notice = `\n> Output cut at ${limit} characters. Read the full plan in the job log.`
-              plan = plan.slice(0, limit)
-            }
-            const m = plan.match(/Plan: (\d+) to add, (\d+) to change, (\d+) to destroy/)
-            const summary = m
-              ? `**${m[1]}** to add · **${m[2]}** to change · **${m[3]}** to destroy`
-              : (/No changes/.test(plan) ? '**No changes.**' : '_Counts unavailable — see the log._')
-            const body = [marker, `### Plan ${process.env.STACK} (cloudflare)`, '', summary, notice, '',
-              // open: the diff is the thing a reviewer came to read. Collapsed by
-            // default, approving without expanding it is one click, and the
-            // plan comment stops being a gate and becomes decoration.
-            '<details open><summary>Full plan</summary>', '', '```terraform', plan, '```', '', '</details>'].join('\n')
-            const { data: comments } = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner, repo: context.repo.repo, per_page: 100,
-            })
-            const existing = comments.find(c => c.body.includes(marker))
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body })
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner, repo: context.repo.repo, body })
-            }
+          name: plan-cloudflare-${{ inputs.stack }}
+          path: ${{ inputs.root }}/plan.txt
+          retention-days: 5
+          if-no-files-found: error
