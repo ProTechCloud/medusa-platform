@@ -60,13 +60,29 @@ Everything below is done once, by a person. CI cannot do any of it — that is t
 ### 1. The bootstrap admin
 
 Create a dedicated identity used for `_setup` roots and nothing else, so that "who applied
-the foundation" is answerable and separable from day-to-day access.
+the foundation" is answerable and separable from day-to-day access. It is a service
+account, not a person — `medusa-bootstrap@<management project>` — and you become it by
+minting a token, never by logging in as it.
+
+Two credentials are needed, because the `_setup` roots reach two clouds: the state lives
+in Google, and `org/cloudflare/_setup` creates resources in Cloudflare. Both are set up by
+`.envrc.local`, copied from the committed example:
 
 ```sh
-gcloud auth application-default login     # as the bootstrap admin
+cp .envrc.local.example .envrc.local   # then paste the Cloudflare bootstrap token
+source .envrc.local                    # in every new terminal
 ```
 
-At organization scope it needs `resourcemanager.projectCreator`,
+It mints the Google token, checks both credentials against the APIs, and refuses to
+continue if either is wrong. An environment variable lives only in the window that created
+it, and the Google token lasts an hour — so `source` again rather than wondering why a
+plan started failing.
+
+The Cloudflare half is a token from the **Create Additional Tokens** template:
+`API Tokens Write`, scope User, no other permission, which is Cloudflare's own
+recommendation. It is the one Cloudflare credential never stored in GitHub.
+
+At organization scope the Google identity needs `resourcemanager.projectCreator`,
 `resourcemanager.projectIamAdmin`, `iam.denyAdmin` and `orgpolicy.policyAdmin`;
 `billing.user` on the billing account; and `owner` on the management project.
 
@@ -130,19 +146,21 @@ for root in org/cloudflare/_setup stg/gcp/_setup prd/gcp/_setup; do
 done
 ```
 
-> The bootstrap admin is a service account you impersonate. If your
-> application-default credentials are themselves an impersonated account,
-> `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` will try to chain a second hop and fail;
-> mint a token directly instead:
+> Run `source .envrc.local` first, in this terminal. Three things about it are easy to get
+> wrong and all three fail in ways that point somewhere else:
 >
-> ```sh
-> export GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token \
->   --impersonate-service-account=BOOTSTRAP_SA \
->   --scopes=https://www.googleapis.com/auth/cloud-platform,openid,https://www.googleapis.com/auth/userinfo.email)"
-> ```
->
-> The extra scopes are not optional: without them the provider cannot read back
-> which identity is running, and the project pin stops the run.
+> - **Do not use `gcloud auth application-default login`** as the bootstrap admin, and do
+>   not set `auth/impersonate_service_account` globally. Either makes gcloud chain two
+>   hops — you, then that account, then the bootstrap admin — and the second hop is
+>   refused.
+> - **The `--scopes` are not optional**, even though gcloud warns it ignores them for an
+>   impersonated account. Without them the token authenticates but carries no identity,
+>   `userinfo` comes back empty, and the project pin stops the run with a message about
+>   the credential it could not read.
+> - **Never fold stderr into the captured token.** gcloud prints two warnings on every
+>   impersonated call, so `$(gcloud ... 2>&1)` puts `WARNING: This command is using
+>   service account impersonation` in the variable instead of the token. The result is a
+>   401 that names nothing.
 
 ### 4. Map the outputs to GitHub variables
 
