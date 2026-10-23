@@ -54,11 +54,20 @@ locals {
   }
 }
 
+# The names go in raw, despite the provider documentation saying the value must
+# be URL-encoded. The provider encodes them itself, so passing urlencode()
+# output double-encodes: a space becomes `+`, the `+` becomes `%2B`, and the
+# API is asked for the literal string "Zone+Settings+Read".
+#
+# That failed silently rather than loudly — a filter it cannot match is
+# ignored, the full list comes back, and the exact-name filter below picked the
+# right one anyway. Correct by accident is still worth fixing: the filter is
+# what keeps this from depending on a 1000-item default page size.
 data "cloudflare_api_token_permission_groups_list" "lookup" {
   for_each = local.permission_groups
 
-  name  = urlencode(each.value.name)
-  scope = urlencode(each.value.scope)
+  name  = each.value.name
+  scope = each.value.scope
 }
 
 locals {
