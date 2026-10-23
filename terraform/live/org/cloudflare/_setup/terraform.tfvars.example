@@ -1,8 +1,19 @@
-# This root holds nothing any more. The zone settings it used to own moved to
-# org/cloudflare, so they go through plan, review and apply.
+# Copy to terraform.tfvars and fill in. The real file is git-ignored.
 #
-# It still needs one hand-apply, to forget those settings without resetting
-# them at the edge — see the `removed` block in main.tf. After that apply and
-# the merge that hands them to org/cloudflare, the folder has no reason to
-# exist and should be deleted.
-zone_id = "<cloudflare zone id>"
+# Applied by hand, with a bootstrap Cloudflare token created from the
+# "Create Additional Tokens" template — permission `API Tokens Write`, scope
+# User, and nothing else, as Cloudflare's documentation recommends. That token
+# never goes into GitHub; it lives with the person who applies this root.
+#
+#   export CLOUDFLARE_API_TOKEN="<the bootstrap token>"
+#   terraform init -backend-config="bucket=<management_state_bucket>"
+#   terraform apply
+#
+# Then read the two tokens it created into GitHub, once:
+#
+#   terraform output -raw plan_token   # CLOUDFLARE_PLAN_TOKEN, repository secret
+#   terraform output -raw mint_token   # CLOUDFLARE_MINT_TOKEN, environment secret
+#                                      # on stg, prd and cloudflare-org
+
+account_id = "<cloudflare account id>"
+zone_id    = "<cloudflare zone id>"

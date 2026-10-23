@@ -165,12 +165,21 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
 
-Two secrets, and only two — both Cloudflare, because Cloudflare has no workload identity:
+Two secrets, and only two — both Cloudflare, because Cloudflare's API has no workload
+identity federation. Both are created by `org/cloudflare/_setup`; you copy each value in
+once with `terraform output -raw`.
 
-| Secret | Scope | Why it is a secret |
+| Secret | Scope | Where its value comes from |
 |---|---|---|
-| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
-| `CLOUDFLARE_PLAN_TOKEN` | repository secret | Read-only. Plans run on unreviewed code, so they get a credential whose leak buys nothing but reading records that are already public. |
+| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | `org/cloudflare/_setup` → `mint_token`. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
+| `CLOUDFLARE_PLAN_TOKEN` | repository secret | `org/cloudflare/_setup` → `plan_token`. Read-only, so a leak buys nothing but reading records that are already public. |
+
+A third token exists and is never stored in GitHub: the **bootstrap token** that applies
+`org/cloudflare/_setup`. It is Cloudflare's "Create Additional Tokens" template —
+`API Tokens Write`, scope User, no other permission — and it lives with the person who
+applies that root. Narrow surface, not low privilege: Cloudflare's own documentation
+says such a token "can create tokens with access to any of a user's resources", so
+rotating it is the lever to pull if anything leaks.
 
 GitHub **environments** `stg`, `prd` and `cloudflare-org` must exist; their names are part
 of the trust rules, not labels.
@@ -195,12 +204,29 @@ The tunnel token is the exception — `stg-cd` writes it automatically after eac
 
 ## Secrets and state
 
-**No secret value reaches a state file.** Terraform creates secret containers, never their
-contents; the tunnel token is fetched from the Cloudflare API by the deploy job and written
-under an identity that can add a version to that one secret and cannot read it back.
-
-The only value this repository writes into state is the literal string
+**No secret value reaches a GCP state file.** Terraform creates secret containers, never
+their contents; the tunnel token is fetched from the Cloudflare API by the deploy job and
+written under an identity that can add a version to that one secret and cannot read it
+back. The only value the GCP roots write into state is the literal string
 `REPLACE_ME_VIA_SECRET_MANAGER`.
+
+**Two secret values do reach state**, both in `org/cloudflare/_setup`, and both listed
+here because the standard asks for exactly that:
+
+| Secret | Where in state | Who can read that state |
+|---|---|---|
+| the plan token | `org/cloudflare/setup` | the bootstrap admin only |
+| the mint token | `org/cloudflare/setup` | the bootstrap admin only |
+
+Terraform creates both, so their policies are a reviewable diff rather than something
+clicked in a dashboard — which is the trade: a value in a state file nobody but the
+bootstrap admin can read, against a permission nobody at all could review. The IAM
+condition in `org/gcp/_setup` is what makes the second half true, by limiting the
+Cloudflare CI identities to the `org/cloudflare/live/` prefix.
+
+Marking an output `sensitive` keeps a value out of the logs. It does not encrypt it in
+state — what protects these is the bucket: customer-managed key, versioned, and reachable
+under that prefix by one identity.
 
 > Secret Manager ids accept only `[a-zA-Z0-9_-]`, so the four-part name in the standard
 > cannot use `/`. The parts are kept and joined with `_`:
