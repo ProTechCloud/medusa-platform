@@ -1,10 +1,21 @@
-# strict, not full: `full` accepts any certificate at the origin including a
-# self-signed one, which means the edge-to-origin leg can be intercepted
-# without anything failing visibly.
-resource "cloudflare_zone_setting" "this" {
-  for_each = var.zone_settings
+# The zone settings moved to org/cloudflare, so they go through plan, review
+# and apply like every other change. A _setup root holds only what CI needs in
+# order to run at all, and CI does not need these to run — it needs them to be
+# reviewed.
+#
+# `removed` with `destroy = false` rather than deleting the resource block:
+# deleting it would make Terraform destroy the settings, and destroying a
+# cloudflare_zone_setting does not remove anything, it resets that setting to
+# Cloudflare's default. `ssl` would drop from strict to flexible on a live
+# zone, between this apply and the next one.
+#
+# This block forgets them instead. The values stay exactly as they are at the
+# edge, unmanaged for the window between this apply and the merge that lets
+# org/cloudflare take them over.
+removed {
+  from = cloudflare_zone_setting.this
 
-  zone_id    = var.zone_id
-  setting_id = each.key
-  value      = each.value
+  lifecycle {
+    destroy = false
+  }
 }

@@ -1,1 +1,8 @@
+# This root holds nothing any more. The zone settings it used to own moved to
+# org/cloudflare, so they go through plan, review and apply.
+#
+# It still needs one hand-apply, to forget those settings without resetting
+# them at the edge — see the `removed` block in main.tf. After that apply and
+# the merge that hands them to org/cloudflare, the folder has no reason to
+# exist and should be deleted.
 zone_id = "<cloudflare zone id>"

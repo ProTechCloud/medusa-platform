@@ -3,6 +3,28 @@ variable "zone_id" {
   type        = string
 }
 
+variable "zone_settings" {
+  description = <<-EOT
+    Zone-wide security posture, as setting id to value. One zone serves stg and
+    prd, so every entry here applies to both at once — which is the reason it
+    goes through the pipeline rather than a hand-apply.
+
+    Defaults are the posture, not a starting point: changing one is a reviewed
+    change to this file, so the value a reviewer reads is the value that gets
+    applied.
+  EOT
+  type        = map(string)
+  default = {
+    ssl                      = "strict"
+    always_use_https         = "on"
+    min_tls_version          = "1.2"
+    automatic_https_rewrites = "on"
+    opportunistic_encryption = "on"
+    tls_1_3                  = "on"
+    browser_check            = "on"
+  }
+}
+
 variable "records" {
   description = <<-EOT
     DNS records that belong to no environment — an apex record, a verification
