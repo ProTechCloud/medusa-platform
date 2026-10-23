@@ -11,3 +11,15 @@ module "human_access" {
 
   depends_on = [module.environment_project]
 }
+
+# This module was `developer_access` until the roles became read-only and
+# administration. Terraform keys state by address, so without this it reads the
+# rename as "one module gone, another arrived" and plans a destroy beside a
+# create. The deny policy's name is fixed in the module, so whichever order it
+# chose, the apply would hit "already exists" half way through.
+#
+# Moving the module block covers every instance of its for_each.
+moved {
+  from = module.developer_access
+  to   = module.human_access
+}
