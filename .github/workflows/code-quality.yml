@@ -15,6 +15,7 @@ env:
   TFLINT_VERSION: v0.64.0
   ACTIONLINT_VERSION: 1.7.12
   GITLEAKS_VERSION: 8.30.1
+  TRIVY_VERSION: 0.76.1
 
 jobs:
   # GitHub's own concurrency cancellation leaves matrix jobs running for a
@@ -220,6 +221,46 @@ jobs:
             gitleaks git --redact --verbose
           fi
 
+  # Misconfiguration scanning over the Terraform, separate from tflint: tflint
+  # judges the code, trivy judges what the code would build. A public bucket is
+  # valid HCL and a well-formed root.
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # The binary at a pinned version, with its checksum verified — the same
+      # reasoning as gitleaks above, and the same reasoning as pinning actions
+      # to a SHA: a scanner that silently gains rules turns a green branch red
+      # with no commit to explain it.
+      - name: Install trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfLO "$base/$tarball"
+          curl -sSfL "$base/trivy_${TRIVY_VERSION}_checksums.txt" \
+            | grep " $tarball\$" | sha256sum -c -
+          tar -xzf "$tarball" trivy
+          sudo mv trivy /usr/local/bin/
+
+      # --exit-code 1 with --severity HIGH,CRITICAL: anything lower is
+      # reported and does not block, so the gate stays worth reading.
+      # Exceptions live in .trivyignore.yaml, never in a flag here.
+      - name: Scan the Terraform
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy config terraform/ \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignorefile .trivyignore.yaml
+
+
   # The only check branch protection needs to require. GitHub counts a check
   # that never ran as passed, so a required job that was skipped by a path
   # filter would silently satisfy protection. This one always runs and fails
@@ -227,7 +268,7 @@ jobs:
   summary:
     name: Code Quality Summary
     if: always()
-    needs: [format, validate, actionlint, gitleaks]
+    needs: [format, validate, actionlint, gitleaks, trivy]
     runs-on: ubuntu-latest
     steps:
       - name: Require every check to have passed
@@ -237,7 +278,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "$RESULTS"
-          failed=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key')
+          failed=$(echo "$RESULTS" | jq -r '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | .key')
           if [ -n "$failed" ]; then
             echo "::error::failed or timed out: $(echo "$failed" | tr '\n' ' ')"
             exit 1

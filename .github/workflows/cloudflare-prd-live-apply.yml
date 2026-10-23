@@ -1,5 +1,7 @@
 name: cloudflare-prd-live-apply
 
+# Same switch as gcp-prd-live-apply.yml: visible wiring, apply behind the
+# repository variable TF_APPLY_ENABLE_PRD.
 on:
   push:
     branches: [dev]
@@ -12,7 +14,7 @@ permissions:
 jobs:
   apply:
     name: apply prd cloudflare
-    if: false
+    if: vars.TF_APPLY_ENABLE_PRD == 'true'
     uses: ./.github/workflows/_cloudflare-live-apply.yml
     with:
       stack: prd
