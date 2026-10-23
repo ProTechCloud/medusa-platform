@@ -78,15 +78,9 @@ continue if either is wrong. An environment variable lives only in the window th
 it, and the Google token lasts an hour — so `source` again rather than wondering why a
 plan started failing.
 
-The Cloudflare half is a token from the **Create Additional Tokens** template, with
-exactly two permissions at scope User: `API Tokens Write`, which the template sets, and
-`User Details Read`, which `org/cloudflare/_setup` needs to read the user id that the
-mint token's policy must name — without it the plan fails with a 403 and error 9109.
-
-Nothing else goes on it. Cloudflare's advice to keep this token bare is about resource
-permission like DNS or Zone write: minting power plus direct access is what makes a token
-dangerous. Reading the profile of the user it already acts as is not that. It is the one
-Cloudflare credential never stored in GitHub.
+The Cloudflare half is a token from the **Create Additional Tokens** template:
+`API Tokens Write`, scope User, nothing else, which is Cloudflare's own recommendation.
+It is the one Cloudflare credential never stored in GitHub.
 
 At organization scope the Google identity needs `resourcemanager.projectCreator`,
 `resourcemanager.projectIamAdmin`, `iam.denyAdmin` and `orgpolicy.policyAdmin`;
@@ -195,8 +189,24 @@ once with `terraform output -raw`.
 
 | Secret | Scope | Where its value comes from |
 |---|---|---|
-| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | `org/cloudflare/_setup` → `mint_token`. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
+| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | **By hand**, from the "Create Additional Tokens" template. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
 | `CLOUDFLARE_PLAN_TOKEN` | repository secret | `org/cloudflare/_setup` → `plan_token`. Read-only, so a leak buys nothing but reading records that are already public. |
+
+The mint token is the one Cloudflare permission in this repository that code cannot
+express. Creating it through the API is refused:
+
+```
+POST /client/v4/user/tokens → 400
+{"code":1001,"message":"sub-token is not allowed to have permissions to manage other tokens"}
+```
+
+Cloudflare will not let one token create another token that manages tokens, whatever the
+creating token holds — only a human session can, which is why the dashboard offers the
+template and the API refuses. Their documentation says such a token "can create tokens
+with access to any of a user's resources"; `any` excludes token management.
+
+Keep it separate from the bootstrap token even though the policy is identical. One lives
+in CI and one lives with a person, so they are rotated for different reasons.
 
 A third token exists and is never stored in GitHub: the **bootstrap token** that applies
 `org/cloudflare/_setup`. It is Cloudflare's "Create Additional Tokens" template —
@@ -234,19 +244,14 @@ written under an identity that can add a version to that one secret and cannot r
 back. The only value the GCP roots write into state is the literal string
 `REPLACE_ME_VIA_SECRET_MANAGER`.
 
-**Two secret values do reach state**, both in `org/cloudflare/_setup`, and both listed
-here because the standard asks for exactly that:
+**One secret value does reach state**: the Cloudflare plan token, in
+`org/cloudflare/_setup`, listed here because the standard asks for exactly that. Only the
+bootstrap admin can read that prefix — the IAM condition in `org/gcp/_setup` limits the
+Cloudflare CI identities to `org/cloudflare/live/`.
 
-| Secret | Where in state | Who can read that state |
-|---|---|---|
-| the plan token | `org/cloudflare/setup` | the bootstrap admin only |
-| the mint token | `org/cloudflare/setup` | the bootstrap admin only |
-
-Terraform creates both, so their policies are a reviewable diff rather than something
-clicked in a dashboard — which is the trade: a value in a state file nobody but the
-bootstrap admin can read, against a permission nobody at all could review. The IAM
-condition in `org/gcp/_setup` is what makes the second half true, by limiting the
-Cloudflare CI identities to the `org/cloudflare/live/` prefix.
+Terraform creates it, so its policy is a reviewable diff rather than something clicked in
+a dashboard. That is the trade: a value in a state file nobody but the bootstrap admin can
+read, against a permission nobody at all could review.
 
 Marking an output `sensitive` keeps a value out of the logs. It does not encrypt it in
 state — what protects these is the bucket: customer-managed key, versioned, and reachable

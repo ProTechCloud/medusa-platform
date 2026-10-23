@@ -1,29 +1,29 @@
 # Copy to terraform.tfvars and fill in. The real file is git-ignored.
 #
-# Applied by hand, with a bootstrap Cloudflare token created from the
-# "Create Additional Tokens" template. That token never goes into GitHub; it
-# lives with the person who applies this root.
-#
-# Two permissions, and only two:
-#   API Tokens Write    scope User   — the template's own permission
-#   User Details Read   scope User   — reads the user id the mint token's
-#                                      policy has to name. Without it the plan
-#                                      fails with 403 error 9109.
-#
-# Nothing else. Cloudflare's advice to keep this token bare is about resource
-# permission — DNS, Zone — because minting plus direct access is what makes a
-# token dangerous. Reading the profile of the user it already acts as is not
-# that.
+# Applied by hand, with a bootstrap Cloudflare token from the "Create
+# Additional Tokens" template: permission `API Tokens Write`, scope User, and
+# nothing else, which is Cloudflare's own recommendation. That token never goes
+# into GitHub; it lives with the person who applies this root.
 #
 #   export CLOUDFLARE_API_TOKEN="<the bootstrap token>"
 #   terraform init -backend-config="bucket=<management_state_bucket>"
 #   terraform apply -input=false
 #
-# Then read the two tokens it created into GitHub, once:
+# Then read the token it created into GitHub, once:
 #
 #   terraform output -raw plan_token   # CLOUDFLARE_PLAN_TOKEN, repository secret
-#   terraform output -raw mint_token   # CLOUDFLARE_MINT_TOKEN, environment secret
-#                                      # on stg, prd and cloudflare-org
+#
+# The mint token is not created here, and cannot be. Cloudflare answers
+# `POST /user/tokens` with "sub-token is not allowed to have permissions to
+# manage other tokens" whenever the token being created would itself manage
+# tokens — no matter what the creating token holds. Only a human session can do
+# it, which is why the dashboard has the template and the API refuses.
+#
+# So: make the mint token by hand, from that same template, and put it in the
+# CLOUDFLARE_MINT_TOKEN environment secret on stg, prd and cloudflare-org.
+# Keep it separate from the bootstrap token even though the policy is
+# identical — one lives in CI and one lives with a person, and they are
+# rotated for different reasons.
 
 account_id = "<cloudflare account id>"
 zone_id    = "<cloudflare zone id>"
