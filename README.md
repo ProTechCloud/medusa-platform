@@ -206,7 +206,7 @@ The only value this repository writes into state is the literal string
 > cannot use `/`. The parts are kept and joined with `_`:
 > `medusa/stg/cloudflare/tunnel-token` → `medusa_stg_cloudflare_tunnel-token`.
 
-## Developer access
+## Human access
 
 Sign in with your Google account. No keys are issued, to anyone, anywhere.
 
@@ -214,30 +214,27 @@ Sign in with your Google account. No keys are issued, to anyone, anywhere.
 gcloud auth login
 gcloud config set project medusa-stg
 gcloud compute instances list
-gcloud compute ssh medusa-stg --tunnel-through-iap
 ```
 
-Two roles, granted to the group on `stg` and `prd`:
+Two roles, and nobody gets a shell:
 
-| Role | What it allows |
-|---|---|
-| read-only | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
-| server-access | an IAP tunnel to the one API instance, and a shell on it through OS Login |
+| Role | Who | What it allows |
+|---|---|---|
+| read-only | the developer group | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
+| administration | one named person | full access on `stg` and `prd`, for what CI cannot do |
 
-With read-only alone, stopping an instance, changing anything, or reading a secret value
-is refused.
+With read-only, stopping an instance, changing anything, or reading a secret value is
+refused. Membership is managed in the Google Group, so adding or removing a developer is
+not a code change and not a deploy.
 
-**server-access is the higher-trust grant of the two, which is why it is granted and
-audited separately.** A shell on the box is the box's identity: from inside, the metadata
-server hands out a token for `medusa-<env>-vm`, and that identity reads the tunnel-token
-secret — it has to, because it reads the token at boot to start the connector. So anyone
-with server-access can reach that one value, and the deny policy does not stop them,
-because the deny names the person and the caller here is the VM.
+**No role grants an IAP tunnel or OS Login.** That is deliberate rather than missing: a
+shell on the box is the box's identity, and the box reads the tunnel-token secret because
+it needs it at boot. Any human shell would therefore reach a secret value, whatever the
+deny policy says, because the caller on that path is the VM and not the person.
 
-This is a property of giving a human a shell, not of the IAM grants: the same person can
-read the token out of the running connector's own configuration. Grant server-access to
-people you would trust with that one Cloudflare credential, and keep read-only as the
-daily role for everyone else.
+The administration role is one account and not a group, so every change made outside CI
+has exactly one owner. It sits outside the deny policy — it is the role for the cases
+nobody listed in advance.
 
 ## Pipelines
 

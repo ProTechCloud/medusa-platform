@@ -51,11 +51,20 @@ variable "backend_repository" {
 
 variable "developer_group" {
   description = <<-EOT
-    Group granted read-only and server-access on stg and prd, as
-    `group:address`. IAM accepts both Workspace groups and consumer
-    googlegroups.com addresses. The group is created by hand: Google exposes
-    no API for creating consumer groups, and this organization has no
-    directory for the Cloud Identity API to write into.
+    Group granted the read-only role on stg and prd, as `group:address`. IAM
+    accepts both Workspace groups and consumer googlegroups.com addresses. The
+    group is created by hand: Google exposes no API for creating consumer
+    groups, and this organization has no directory for the Cloud Identity API
+    to write into.
+  EOT
+  type        = string
+}
+
+variable "administrator" {
+  description = <<-EOT
+    The one account granted the administration role on stg and prd, as
+    `user:address`. Full access, used for what CI cannot do, and held by one
+    person so every out-of-band change has an owner.
   EOT
   type        = string
 }

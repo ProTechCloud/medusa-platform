@@ -7,16 +7,27 @@ locals {
 
 }
 
-# A plan runs on pull-request code that nobody has reviewed. If it can read a
-# secret value, a two-line change to the plan step prints it to a public log.
-resource "google_iam_deny_policy" "plan_no_secret_values" {
+# Two identities that must never read a secret value, for different reasons.
+#
+# Plan runs on pull-request code that nobody has reviewed: if it can read a
+# value, a two-line change to the plan step prints it to a public log.
+#
+# The tunnel-token writer only ever writes. secretVersionAdder already omits
+# the read, but the writer is reached by a deploy job, and a role widened later
+# — by hand, in the console, under pressure — would hand that job the value it
+# just wrote. Deny makes the one-way street a guarantee rather than a property
+# of the role list.
+resource "google_iam_deny_policy" "no_secret_values" {
   parent       = local.deny_parent
-  name         = "medusa-plan-no-secret-values"
-  display_name = "Plan may see that a secret exists, never its value"
+  name         = "medusa-no-secret-values"
+  display_name = "Plan and the token writer may see that a secret exists, never its value"
 
   rules {
     deny_rule {
-      denied_principals  = [module.plan_spoke.principal]
+      denied_principals = [
+        module.plan_spoke.principal,
+        module.tunnel_token_writer.principal,
+      ]
       denied_permissions = ["secretmanager.googleapis.com/versions.access"]
     }
   }

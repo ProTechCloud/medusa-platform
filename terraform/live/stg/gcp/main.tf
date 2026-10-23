@@ -5,7 +5,7 @@ module "registry" {
   name        = local.name
   location    = var.region
   description = "Container images for medusa (${var.environment})"
-  labels      = local.labels
+  labels      = merge(local.labels, { component = "registry" })
 }
 
 # The container only. Terraform never learns the value: the deploy job fetches
@@ -21,7 +21,7 @@ module "tunnel_token" {
   name        = "tunnel-token"
   location    = var.region
   kms_key     = local.setup.secrets_key
-  labels      = local.labels
+  labels      = merge(local.labels, { component = "secret" })
 }
 
 # The writer's entire reason to exist, scoped to this one secret. secretVersionAdder
@@ -42,7 +42,7 @@ module "api" {
   zone        = var.zone
   environment = var.environment
   app_port    = var.app_port
-  labels      = local.labels
+  labels      = merge(local.labels, { component = "api" })
 
   service_account_email      = local.setup.instance_service_account
   tunnel_token_secret_id     = module.tunnel_token.secret_id
@@ -70,22 +70,6 @@ resource "google_compute_instance_iam_member" "deploy_rolls_out" {
   member        = "serviceAccount:${local.setup.deploy_spoke}"
 }
 
-# ---------- the IAP tunnel, bound on the instance ----------
-# Bound here and not in _setup for one reason: this is the root that creates
-# the VM, so this is the only place that can name it. `instance` takes the
-# name, not the numeric id, and referencing the resource means Terraform
-# rewrites the binding whenever the VM is replaced.
-#
-# Binding on the instance is what makes the grant true to its description: a
-# second VM in this zone is not reachable through it. A project-level grant
-# conditioned on the zone would cover every instance there.
-resource "google_iap_tunnel_instance_iam_member" "developers_tunnel" {
-  project  = var.project_id
-  zone     = var.zone
-  instance = module.api.instance_name
-  role     = "roles/iap.tunnelResourceAccessor"
-  member   = local.setup.developer_group
-}
 
 # The deploy reaches port 22 through the same tunnel, on the same one
 # instance. Its sudo rights are project-level and stay in _setup; what it may

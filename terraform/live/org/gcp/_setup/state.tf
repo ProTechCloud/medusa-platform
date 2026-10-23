@@ -10,7 +10,8 @@ module "management_state" {
   location   = var.region
 
   labels = {
-    scope      = "management"
-    managed_by = "terraform"
+    env          = "org"
+    component    = "state"
+    "managed-by" = "terraform"
   }
 }

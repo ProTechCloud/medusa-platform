@@ -11,8 +11,8 @@ module "environment_project" {
   apis            = var.apis
 
   labels = {
-    service     = "medusa"
-    environment = each.key
-    managed_by  = "terraform"
+    env          = each.key
+    component    = "project"
+    "managed-by" = "terraform"
   }
 }

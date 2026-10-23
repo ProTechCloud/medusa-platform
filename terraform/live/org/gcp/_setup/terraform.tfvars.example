@@ -1,11 +1,14 @@
 # Copy to terraform.tfvars and fill in. The real file is git-ignored.
 #
-# This root is applied by hand, with the bootstrap admin identity:
+# This root is applied by hand, with the bootstrap admin identity. The backend
+# declaration has to be moved aside for the first apply, not just skipped:
+# `init -backend=false` skips initialisation and then refuses to apply.
 #   gcloud auth application-default login
-#   terraform init -backend=false        # first run: local state
-#   terraform apply
+#   mv backend.tf backend.tf.off
+#   terraform init && terraform apply    # first run: local state
+#   mv backend.tf.off backend.tf
 #   terraform init -migrate-state \
-#     -backend-config="bucket=<management_state_bucket output>"
+#     -backend-config="bucket=$(terraform output -raw management_state_bucket)"
 
 org_id          = "503983453092"
 billing_account = "000000-000000-000000"
@@ -27,4 +30,11 @@ backend_repository  = "medusa-backend"
 # creating consumer groups, and this organization has no directory for the
 # Cloud Identity API to write into. Membership is managed in the group, so
 # adding or removing a developer is not a code change.
+#
+# This group gets the read-only role: it sees everything, changes nothing, and
+# is denied every secret value. Nobody in it gets a shell on the VM.
 developer_group = "group:medusa-platform-developers@googlegroups.com"
+
+# The administration role: full access on stg and prd, for what CI cannot do.
+# One person, so every change made outside CI has an owner.
+administrator = "user:daniel@example.com"
