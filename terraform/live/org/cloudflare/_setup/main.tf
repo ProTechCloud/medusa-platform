@@ -18,6 +18,22 @@
 # `org/cloudflare/live/`. Only the bootstrap admin can read this prefix. The
 # README lists both tokens as secrets that reach state, as the standard asks.
 
+# The mint token's policy has to name the user it manages tokens for, and this
+# is the only call that returns that id.
+#
+# It needs `User Details Read` on the bootstrap token, on top of
+# `API Tokens Write`. Without it this fails with a 403 and error 9109,
+# "Unauthorized to access requested resource", which reads like the token is
+# wrong rather than like one permission is missing.
+#
+# That second permission does not weaken the recommendation to keep this token
+# narrow. Cloudflare's warning is about the minting power — a token that can
+# mint "can create tokens with access to any of a user's resources" — so what
+# must stay off it is resource permission like DNS or Zone write. Reading the
+# profile of the user it already acts as adds no reach at all.
+#
+# Account-owned tokens would avoid this, since they are scoped to an account
+# rather than a person. The provider has no resource for them at v5.
 data "cloudflare_user" "this" {}
 
 # Permission groups are addressed by UUID, and the UUIDs are not stable to

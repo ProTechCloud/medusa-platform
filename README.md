@@ -78,9 +78,15 @@ continue if either is wrong. An environment variable lives only in the window th
 it, and the Google token lasts an hour — so `source` again rather than wondering why a
 plan started failing.
 
-The Cloudflare half is a token from the **Create Additional Tokens** template:
-`API Tokens Write`, scope User, no other permission, which is Cloudflare's own
-recommendation. It is the one Cloudflare credential never stored in GitHub.
+The Cloudflare half is a token from the **Create Additional Tokens** template, with
+exactly two permissions at scope User: `API Tokens Write`, which the template sets, and
+`User Details Read`, which `org/cloudflare/_setup` needs to read the user id that the
+mint token's policy must name — without it the plan fails with a 403 and error 9109.
+
+Nothing else goes on it. Cloudflare's advice to keep this token bare is about resource
+permission like DNS or Zone write: minting power plus direct access is what makes a token
+dangerous. Reading the profile of the user it already acts as is not that. It is the one
+Cloudflare credential never stored in GitHub.
 
 At organization scope the Google identity needs `resourcemanager.projectCreator`,
 `resourcemanager.projectIamAdmin`, `iam.denyAdmin` and `orgpolicy.policyAdmin`;
@@ -125,7 +131,7 @@ cd "$repo/terraform/live/org/gcp/_setup"
 cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
 
 mv backend.tf backend.tf.off
-terraform init && terraform apply          # local state
+terraform init && terraform apply -input=false          # local state
 mv backend.tf.off backend.tf
 
 #     now move that state into the bucket it just made
@@ -141,7 +147,7 @@ for root in org/cloudflare/_setup stg/gcp/_setup prd/gcp/_setup; do
     cd "$repo/terraform/live/$root"
     cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
     terraform init -backend-config="bucket=<management bucket>"
-    terraform apply
+    terraform apply -input=false
   ) || break
 done
 ```

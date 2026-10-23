@@ -1,13 +1,23 @@
 # Copy to terraform.tfvars and fill in. The real file is git-ignored.
 #
 # Applied by hand, with a bootstrap Cloudflare token created from the
-# "Create Additional Tokens" template — permission `API Tokens Write`, scope
-# User, and nothing else, as Cloudflare's documentation recommends. That token
-# never goes into GitHub; it lives with the person who applies this root.
+# "Create Additional Tokens" template. That token never goes into GitHub; it
+# lives with the person who applies this root.
+#
+# Two permissions, and only two:
+#   API Tokens Write    scope User   — the template's own permission
+#   User Details Read   scope User   — reads the user id the mint token's
+#                                      policy has to name. Without it the plan
+#                                      fails with 403 error 9109.
+#
+# Nothing else. Cloudflare's advice to keep this token bare is about resource
+# permission — DNS, Zone — because minting plus direct access is what makes a
+# token dangerous. Reading the profile of the user it already acts as is not
+# that.
 #
 #   export CLOUDFLARE_API_TOKEN="<the bootstrap token>"
 #   terraform init -backend-config="bucket=<management_state_bucket>"
-#   terraform apply
+#   terraform apply -input=false
 #
 # Then read the two tokens it created into GitHub, once:
 #
