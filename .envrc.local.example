@@ -71,9 +71,11 @@ unset _gcp_token
 # ---------------------------------------------------------------------------
 # 2. Cloudflare — creates the plan and mint tokens
 # ---------------------------------------------------------------------------
-# The bootstrap token, from Cloudflare's "Create Additional Tokens" template:
-# permission `API Tokens Write`, scope User, nothing else. It is the one
-# Cloudflare credential never stored in GitHub.
+# The bootstrap token: an ACCOUNT token with `Account API Tokens Write` and
+# nothing else. Created under Manage Account → API Tokens, not under My
+# Profile — My Profile makes user tokens, which belong to a person and cannot
+# manage the account tokens this root creates. It is the one Cloudflare
+# credential never stored in GitHub.
 #
 # Replace the value below. Keep the quotes.
 export CLOUDFLARE_API_TOKEN="PASTE_THE_BOOTSTRAP_TOKEN_HERE"
@@ -81,8 +83,8 @@ export CLOUDFLARE_API_TOKEN="PASTE_THE_BOOTSTRAP_TOKEN_HERE"
 if [ "$CLOUDFLARE_API_TOKEN" = "PASTE_THE_BOOTSTRAP_TOKEN_HERE" ]; then
   echo
   echo "The Cloudflare line in .envrc.local still holds the placeholder."
-  echo "Create the token at dash.cloudflare.com → My Profile → API Tokens,"
-  echo "from the 'Create Additional Tokens' template, and paste it in."
+  echo "Create it at dash.cloudflare.com → Manage Account → API Tokens,"
+  echo "with Account API Tokens Write and nothing else, and paste it in."
   return 1
 fi
 
