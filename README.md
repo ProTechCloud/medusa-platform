@@ -201,16 +201,20 @@ Cloudflare account rather than to a person, so nobody leaving the team takes CI 
 and that is what Cloudflare documents for automation. In Terraform the resource is
 `cloudflare_account_token`; in the workflows the endpoint is `/accounts/{id}/tokens`.
 
-It is also what makes the mint token expressible in code at all. The user API refuses to
-let one token create another that manages tokens:
+The mint token is the exception, and the one Cloudflare permission here that code cannot
+express. Creating it is refused on both APIs:
 
 ```
-POST /client/v4/user/tokens → 400
-{"code":1001,"message":"sub-token is not allowed to have permissions to manage other tokens"}
+POST /client/v4/user/tokens                  → 400, code 1001   (caller: user token, API Tokens Write)
+POST /client/v4/accounts/{account_id}/tokens → 400, code 1001   (caller: account token, Account API Tokens Write)
+{"message":"sub-token is not allowed to have permissions to manage other tokens"}
 ```
 
-Every user token is a sub-token of a person, so that refusal always applies there. An
-account token managing account tokens is not that relationship.
+Both callers were created in the dashboard, not by another token, so "sub-token" means the
+token being created: a token minted through the API may not hold token-management
+permission. Cloudflare documents no such rule — this is two observations here and one
+matching report elsewhere, and a narrower resource scope has not been tried. If a working
+shape turns up, the mint token belongs in `org/cloudflare/_setup` beside the plan token.
 
 Keep the mint token separate from the bootstrap token even though the policy is identical.
 One lives in CI and one lives with a person, so they are rotated for different reasons.

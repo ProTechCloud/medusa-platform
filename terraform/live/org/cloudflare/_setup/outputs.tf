@@ -5,7 +5,6 @@ output "zone_id" {
 # The values, so they can be read once and piped into GitHub:
 #
 #   terraform output -raw plan_token | gh secret set CLOUDFLARE_PLAN_TOKEN
-#   terraform output -raw mint_token | gh secret set CLOUDFLARE_MINT_TOKEN --env stg
 #
 # Marked sensitive, which keeps them out of the plan and apply logs. It does
 # not keep them out of the state file — `sensitive` masks output, it does not
@@ -17,18 +16,8 @@ output "plan_token" {
   sensitive   = true
 }
 
-output "mint_token" {
-  description = "Token-minting token for apply jobs. Goes into the CLOUDFLARE_MINT_TOKEN environment secret on stg, prd and cloudflare-org."
-  value       = cloudflare_account_token.mint.value
-  sensitive   = true
-}
-
 # Not secret, and worth having: an id is what an audit log entry names, so
 # these are how you tell which token did something.
 output "plan_token_id" {
   value = cloudflare_account_token.plan.id
-}
-
-output "mint_token_id" {
-  value = cloudflare_account_token.mint.id
 }

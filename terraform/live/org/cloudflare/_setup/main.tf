@@ -41,7 +41,6 @@ locals {
     zone_read     = { name = "Zone Read", scope = "com.cloudflare.api.account.zone" }
     dns_read      = { name = "DNS Read", scope = "com.cloudflare.api.account.zone" }
     settings_read = { name = "Zone Settings Read", scope = "com.cloudflare.api.account.zone" }
-    tokens_write  = { name = "Account API Tokens Write", scope = "com.cloudflare.api.account" }
   }
 }
 
@@ -103,26 +102,34 @@ resource "cloudflare_account_token" "plan" {
   ]
 }
 
-# ---------- the mint token ----------
-# Held as an environment secret on stg, prd and cloudflare-org, usable only
-# from dev, because it is what the apply jobs use to create their per-job write
-# tokens through `/accounts/{id}/tokens`.
+# ---------- the mint token is not here ----------
+# Two attempts, both refused, both with a credential created in the dashboard
+# and carrying the permission the call needs:
 #
-# `Account API Tokens Write` and nothing else, which narrows what it does
-# directly and not what it can reach: a token that can mint can mint one with
-# any permission the account holds. It is a master key with a narrow surface,
-# not a low-privilege credential, and rotating it is the lever to pull if
-# anything in CI leaks.
-resource "cloudflare_account_token" "mint" {
-  account_id = var.account_id
-  name       = "medusa-cloudflare-mint"
-
-  policies = [{
-    effect            = "allow"
-    permission_groups = [{ id = local.group_id.tokens_write }]
-    resources         = jsonencode({ "com.cloudflare.api.account.${var.account_id}" = "*" })
-  }]
-}
+#   POST /client/v4/user/tokens                  → 400, code 1001
+#     caller: user token with `API Tokens Write`
+#   POST /client/v4/accounts/{account_id}/tokens → 400, code 1001
+#     caller: account token with `Account API Tokens Write`
+#
+#   {"message":"sub-token is not allowed to have permissions to manage other tokens"}
+#
+# The same refusal on both APIs rules out this being a user-versus-account
+# distinction. And because both callers were made in the dashboard rather than
+# by another token, "sub-token" has to mean the token being created, not the
+# one creating it: what is refused is a token minted through the API holding
+# token-management permission.
+#
+# Stated at the confidence it has: Cloudflare documents no such rule, and this
+# is two observations plus one matching report from outside this project. What
+# has not been tried is a narrower resource scope than the whole account, or a
+# different permission group. If someone finds a shape that works, the mint
+# token belongs here beside the plan token.
+#
+# Until then it is made by hand, from the Create Additional Tokens template
+# under Manage Account → API Tokens, and its policy is the one Cloudflare
+# permission in this repository that code cannot express. Keep it separate from
+# the bootstrap token even though the policy is identical: one lives in CI and
+# one lives with a person, and they are rotated for different reasons.
 
 # A user-owned plan token existed here briefly, before this root moved to
 # account tokens. It cannot be destroyed from here: the provider reaches a user
