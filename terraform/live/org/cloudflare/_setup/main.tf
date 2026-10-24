@@ -124,6 +124,16 @@ resource "cloudflare_account_token" "mint" {
   }]
 }
 
+# A user-owned plan token existed here briefly, before this root moved to
+# account tokens. It cannot be destroyed from here: the provider reaches a user
+# token through /user/tokens, and an account token is refused there with "Valid
+# user-level authentication not found". Terraform could neither refresh it nor
+# delete it, so the apply stopped on the refresh.
+#
+# It was dropped from state with `terraform state rm cloudflare_api_token.plan`
+# and revoked by hand under My Profile → API Tokens. Written down because the
+# state is the only record that it ever existed, and that record is now gone.
+
 # The zone settings this root used to own moved to org/cloudflare, so they go
 # through plan, review and apply.
 #

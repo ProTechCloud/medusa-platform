@@ -104,20 +104,26 @@ if [ "$_who" != "$BOOTSTRAP_SA" ]; then
   return 1
 fi
 
+# /accounts, not /user/tokens/verify. The bootstrap token is an account token,
+# and account tokens are refused at every user-level endpoint with "Valid
+# user-level authentication not found" — so the old check reported a working
+# token as broken. This call also names the account, which is the useful half:
+# a token for the wrong account authenticates fine and then changes nothing you
+# expected.
 _cf="$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  https://api.cloudflare.com/client/v4/user/tokens/verify \
-  | sed -n 's/.*"status": *"\([^"]*\)".*/\1/p')"
+  https://api.cloudflare.com/client/v4/accounts \
+  | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | head -1)"
 
-if [ "$_cf" != "active" ]; then
+if [ -z "$_cf" ]; then
   echo
-  echo "Cloudflare did not accept the bootstrap token."
-  echo "  expected: active"
-  echo "  got:      ${_cf:-<nothing — check the value in .envrc.local>}"
+  echo "Cloudflare did not accept the bootstrap token, or it is not an account token."
+  echo "An account token's value starts with cfat_ and is created under"
+  echo "Manage Account → API Tokens — not under My Profile."
   unset _cf
   return 1
 fi
 
 echo "google:     $_who"
-echo "cloudflare: $_cf"
+echo "cloudflare: account \"$_cf\""
 echo "ready. the Google token lasts one hour; source this file again after that."
 unset _who _cf
