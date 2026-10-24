@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           groups=$(curl -sS -H "Authorization: Bearer $MINT_TOKEN" \
-            "https://api.cloudflare.com/client/v4/user/tokens/permission_groups")
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/tokens/permission_groups")
           tunnel_read=$(echo "$groups" | jq -r '.result[] | select(.name=="Cloudflare Tunnel Read") | .id' | head -1)
 
           body=$(jq -n \
@@ -92,7 +92,7 @@ jobs:
 
           created=$(curl -sS -X POST -H "Authorization: Bearer $MINT_TOKEN" \
             -H "Content-Type: application/json" -d "$body" \
-            "https://api.cloudflare.com/client/v4/user/tokens")
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/tokens")
           [ "$(echo "$created" | jq -r '.success')" = "true" ] || { echo "::error::mint failed"; exit 1; }
 
           token=$(echo "$created" | jq -r '.result.value')
@@ -157,7 +157,8 @@ jobs:
         shell: bash
         env:
           MINT_TOKEN: ${{ secrets.CLOUDFLARE_MINT_TOKEN }}
+          ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           curl -sS -X DELETE -H "Authorization: Bearer $MINT_TOKEN" \
-            "https://api.cloudflare.com/client/v4/user/tokens/${{ steps.cf.outputs.token_id }}" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/tokens/${{ steps.cf.outputs.token_id }}" \
             | jq -r '.success' | grep -q true && echo "token revoked"

@@ -1,29 +1,26 @@
 # Copy to terraform.tfvars and fill in. The real file is git-ignored.
 #
-# Applied by hand, with a bootstrap Cloudflare token from the "Create
-# Additional Tokens" template: permission `API Tokens Write`, scope User, and
-# nothing else, which is Cloudflare's own recommendation. That token never goes
-# into GitHub; it lives with the person who applies this root.
+# Applied by hand, with a bootstrap token that is itself an account token:
+# permission `Account API Tokens Write`, scoped to the account, and nothing
+# else. Create it at dash.cloudflare.com → Manage Account → API Tokens, which
+# is where account tokens live — not under My Profile, which creates user
+# tokens belonging to a person.
 #
-#   export CLOUDFLARE_API_TOKEN="<the bootstrap token>"
+# That token never goes into GitHub; it lives with the person who applies this
+# root.
+#
+#   export CLOUDFLARE_API_TOKEN="<the bootstrap account token>"
 #   terraform init -backend-config="bucket=<management_state_bucket>"
 #   terraform apply -input=false
 #
-# Then read the token it created into GitHub, once:
+# Then pipe each token it created into GitHub, once. Piping rather than
+# copying: a value printed to the terminal stays in the scrollback, and one
+# echoed stays in the shell history.
 #
-#   terraform output -raw plan_token   # CLOUDFLARE_PLAN_TOKEN, repository secret
-#
-# The mint token is not created here, and cannot be. Cloudflare answers
-# `POST /user/tokens` with "sub-token is not allowed to have permissions to
-# manage other tokens" whenever the token being created would itself manage
-# tokens — no matter what the creating token holds. Only a human session can do
-# it, which is why the dashboard has the template and the API refuses.
-#
-# So: make the mint token by hand, from that same template, and put it in the
-# CLOUDFLARE_MINT_TOKEN environment secret on stg, prd and cloudflare-org.
-# Keep it separate from the bootstrap token even though the policy is
-# identical — one lives in CI and one lives with a person, and they are
-# rotated for different reasons.
+#   terraform output -raw plan_token | gh secret set CLOUDFLARE_PLAN_TOKEN
+#   terraform output -raw mint_token | gh secret set CLOUDFLARE_MINT_TOKEN --env stg
+#   terraform output -raw mint_token | gh secret set CLOUDFLARE_MINT_TOKEN --env prd
+#   terraform output -raw mint_token | gh secret set CLOUDFLARE_MINT_TOKEN --env cloudflare-org
 
 account_id = "<cloudflare account id>"
 zone_id    = "<cloudflare zone id>"

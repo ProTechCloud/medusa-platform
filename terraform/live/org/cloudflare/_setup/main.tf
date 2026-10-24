@@ -1,40 +1,31 @@
-# The long-lived Cloudflare plan token, created here rather than clicked in a
+# The two long-lived Cloudflare tokens, created here rather than clicked in a
 # dashboard.
 #
+# Account-owned, not user-owned. `cloudflare_account_token` and
+# `/accounts/{id}/tokens` belong to the Cloudflare account; `cloudflare_api_token`
+# and `/user/tokens` belong to a person, and a person leaving takes CI with
+# them. Account tokens are also what Cloudflare documents for automation.
+#
+# That choice is also what makes the mint token expressible here at all. The
+# user API refuses to let one token create another that manages tokens —
+# `{"code":1001,"message":"sub-token is not allowed to have permissions to
+# manage other tokens"}` — because every user token is a sub-token of a person.
+# An account token managing account tokens is not that relationship.
+#
 # This is the one root that belongs in `_setup` on the Cloudflare side: CI
-# cannot run at all without this token, and it is applied by a person holding a
-# bootstrap token whose only permission is `API Tokens Write` — Cloudflare's
-# own "Create Additional Tokens" template.
+# cannot run at all without these, and a person applies it holding a bootstrap
+# account token whose only permission is `Account API Tokens Write`.
 #
 # The point is not that a hand-made secret is untidy. It is that a token's
 # policy is the security boundary, and a policy clicked in a dashboard is
 # reviewed by nobody. Everything else in this repository makes permission
 # readable in a diff.
 #
-# ---------------------------------------------------------------------------
-# The mint token is NOT here, and cannot be.
-# ---------------------------------------------------------------------------
-# Creating it through the API fails:
-#
-#   POST /client/v4/user/tokens → 400
-#   {"code":1001,"message":"sub-token is not allowed to have permissions to
-#    manage other tokens"}
-#
-# Cloudflare refuses to let one token create another token that manages tokens,
-# whatever the creating token holds. Only a human session can, which is why the
-# dashboard offers the template and the API does not. Their documentation says
-# such a token "can create tokens with access to any of a user's resources" —
-# `any` turns out to exclude token management.
-#
-# So the mint token stays hand-made, and the README says so and states the
-# policy it must carry. Its policy is the one Cloudflare permission in this
-# repository that code cannot express.
-#
-# The plan token's value lands in this root's state. `org/cloudflare/setup`
-# lives in the management bucket, and the IAM condition in org/gcp/_setup
-# limits the Cloudflare CI identities to `org/cloudflare/live/`, so only the
-# bootstrap admin can read this prefix. The README lists it as a secret that
-# reaches state, as the standard asks.
+# Both values land in this root's state. `org/cloudflare/setup` lives in the
+# management bucket, and the IAM condition in org/gcp/_setup limits the
+# Cloudflare CI identities to `org/cloudflare/live/`, so only the bootstrap
+# admin can read this prefix. The README lists both as secrets that reach
+# state, as the standard asks.
 
 # Permission groups are addressed by UUID, and the UUIDs are not stable to
 # paste from a tutorial. They are looked up by name, and an exact-name match is
@@ -50,6 +41,7 @@ locals {
     zone_read     = { name = "Zone Read", scope = "com.cloudflare.api.account.zone" }
     dns_read      = { name = "DNS Read", scope = "com.cloudflare.api.account.zone" }
     settings_read = { name = "Zone Settings Read", scope = "com.cloudflare.api.account.zone" }
+    tokens_write  = { name = "Account API Tokens Write", scope = "com.cloudflare.api.account" }
   }
 }
 
@@ -62,23 +54,25 @@ locals {
 # ignored, the full list comes back, and the exact-name filter below picked the
 # right one anyway. Correct by accident is still worth fixing: the filter is
 # what keeps this from depending on a 1000-item default page size.
-data "cloudflare_api_token_permission_groups_list" "lookup" {
+data "cloudflare_account_api_token_permission_groups_list" "lookup" {
   for_each = local.permission_groups
 
-  name  = each.value.name
-  scope = each.value.scope
+  account_id = var.account_id
+  name       = each.value.name
+  scope      = each.value.scope
 }
 
 locals {
   group_id = {
     for key, wanted in local.permission_groups :
     key => one([
-      for group in data.cloudflare_api_token_permission_groups_list.lookup[key].result :
+      for group in data.cloudflare_account_api_token_permission_groups_list.lookup[key].result :
       group.id if group.name == wanted.name
     ])
   }
 }
 
+# ---------- the plan token ----------
 # Read-only, and a repository secret rather than an environment one: plans run
 # on pull-request code, and `uses: ./…` resolves from the pull request's own
 # branch, so any secret a plan job holds is reachable by a workflow an
@@ -87,8 +81,9 @@ locals {
 #
 # The read groups mirror the write groups the apply job mints for itself, so
 # the two stay comparable when either changes.
-resource "cloudflare_api_token" "plan" {
-  name = "medusa-cloudflare-plan"
+resource "cloudflare_account_token" "plan" {
+  account_id = var.account_id
+  name       = "medusa-cloudflare-plan"
 
   policies = [
     {
@@ -106,6 +101,27 @@ resource "cloudflare_api_token" "plan" {
       resources = jsonencode({ "com.cloudflare.api.account.zone.${var.zone_id}" = "*" })
     },
   ]
+}
+
+# ---------- the mint token ----------
+# Held as an environment secret on stg, prd and cloudflare-org, usable only
+# from dev, because it is what the apply jobs use to create their per-job write
+# tokens through `/accounts/{id}/tokens`.
+#
+# `Account API Tokens Write` and nothing else, which narrows what it does
+# directly and not what it can reach: a token that can mint can mint one with
+# any permission the account holds. It is a master key with a narrow surface,
+# not a low-privilege credential, and rotating it is the lever to pull if
+# anything in CI leaks.
+resource "cloudflare_account_token" "mint" {
+  account_id = var.account_id
+  name       = "medusa-cloudflare-mint"
+
+  policies = [{
+    effect            = "allow"
+    permission_groups = [{ id = local.group_id.tokens_write }]
+    resources         = jsonencode({ "com.cloudflare.api.account.${var.account_id}" = "*" })
+  }]
 }
 
 # The zone settings this root used to own moved to org/cloudflare, so they go
