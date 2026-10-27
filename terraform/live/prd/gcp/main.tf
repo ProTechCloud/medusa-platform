@@ -50,3 +50,19 @@ module "api" {
   artifact_registry_location = module.registry.location
 }
 
+# ---------- watching the service ----------
+# The uptime check calls the public hostname, which this root does not own: the
+# DNS record and the tunnel live in <env>/cloudflare. Both roots build the name
+# from the same two inputs instead of one reading the other's state, because
+# the Cloudflare apply runs beside this one — a remote-state read here would
+# fail on the first apply of an environment, before that state exists.
+module "monitoring" {
+  source = "../../../modules/gcp/monitoring"
+
+  project_id    = var.project_id
+  environment   = var.environment
+  instance_name = module.api.instance_name
+  hostname      = "api-${var.environment}-medusa.${var.domain}"
+  alert_email   = local.setup.alert_email
+  labels        = merge(local.labels, { component = "monitoring" })
+}

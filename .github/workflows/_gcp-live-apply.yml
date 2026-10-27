@@ -33,6 +33,10 @@ on:
       workload_identity_provider:
         required: true
         type: string
+      domain:
+        description: Zone the API is published under. Builds the hostname the uptime check calls.
+        required: true
+        type: string
       audience:
         required: true
         type: string
@@ -106,6 +110,7 @@ jobs:
           TF_VAR_project_id: ${{ inputs.project_id }}
           TF_VAR_management_state_bucket: ${{ inputs.management_state_bucket }}
           TF_VAR_spoke_service_account: ${{ inputs.spoke_service_account }}
+          TF_VAR_domain: ${{ inputs.domain }}
         run: |
           set +e
           terraform plan -no-color -input=false -lock-timeout=5m -detailed-exitcode -out=tfplan

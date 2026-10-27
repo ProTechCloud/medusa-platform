@@ -84,6 +84,12 @@ module "apply_spoke" {
     { role = "roles/iap.admin" },
     { role = "roles/serviceusage.serviceUsageAdmin" },
 
+    # Uptime checks, alert policies and the notification channel. Narrower
+    # roles exist per object type, but they come as three bindings granting
+    # between them what this one does; monitoring holds no secret and no
+    # access, so the smaller surface is not worth the longer list.
+    { role = "roles/monitoring.editor" },
+
     # Project-level bindings are part of applying the stack (the instance
     # needs logWriter), but projectIamAdmin unconditionally would let the
     # apply grant itself owner. The condition limits it to the exact roles

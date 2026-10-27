@@ -30,6 +30,15 @@ output "deploy_spoke" {
   value       = one(module.deploy_spoke[*].email)
 }
 
+# Forwarded from org/gcp/_setup rather than taken as an input here, so the
+# address alerts go to and the account that holds the administration role are
+# the same string in one place. The IAM member prefix comes off: a
+# notification channel wants an address, not an IAM member.
+output "alert_email" {
+  description = "Address the monitoring alerts notify."
+  value       = trimprefix(local.org.administrator, "user:")
+}
+
 output "instance_service_account" {
   description = "Identity the VM runs as. Created here so the apply spoke never needs serviceAccountAdmin."
   value       = google_service_account.instance.email

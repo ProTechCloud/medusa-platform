@@ -60,6 +60,15 @@ output "backend_deploy_hub" {
   value = module.backend_deploy_hub.email
 }
 
+# Read by each environment's _setup root, which passes it on as the address
+# alerts are sent to. Declared once, as the person who owns changes made
+# outside CI; a separate alert-recipient setting would be free to drift from
+# whoever actually holds the administration role.
+output "administrator" {
+  description = "The administration role holder, as an IAM member string."
+  value       = var.administrator
+}
+
 output "cloudflare_plan_identities" {
   value = { for k, sa in google_service_account.cloudflare_plan : k => sa.email }
 }

@@ -30,3 +30,8 @@ variable "spoke_service_account" {
   description = "Spoke this run acts as. The plan workflow passes the read-only spoke, the apply workflow the write one, so the same root is harmless or not depending only on which identity CI hands it."
   type        = string
 }
+
+variable "domain" {
+  description = "Zone the API is published under, the same value the Cloudflare roots take. The uptime check is built from it, so it calls the address a user calls rather than the instance."
+  type        = string
+}

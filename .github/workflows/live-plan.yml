@@ -39,6 +39,7 @@ jobs:
       service_account: ${{ vars.GCP_PLAN_HUB_STG }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
+      domain: ${{ vars.CLOUDFLARE_DOMAIN }}
     permissions:
       contents: read
       id-token: write
@@ -59,6 +60,7 @@ jobs:
       service_account: ${{ vars.GCP_PLAN_HUB_PRD }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
+      domain: ${{ vars.CLOUDFLARE_DOMAIN }}
     permissions:
       contents: read
       id-token: write
