@@ -307,7 +307,7 @@ nobody listed in advance.
 | Workflow | When | What |
 |---|---|---|
 | `live-plan` | every PR | plans all five stacks; `Plan stg` and `Plan prd` always report, Cloudflare stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
-| `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks → **Code Quality Summary** |
+| `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks, trivy → **Code Quality Summary** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare |
 | `{gcp,cloudflare}-prd-live-apply` | every push | **switched off** — shows as skipped |
