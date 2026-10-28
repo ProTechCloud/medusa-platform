@@ -1,0 +1,35 @@
+name: org-cd
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: org-cd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  cloudflare:
+    name: apply org cloudflare
+    uses: ./.github/workflows/_cloudflare-live-apply.yml
+    with:
+      stack: org
+      # org owns no environment of its own, so it gets a dedicated one. The
+      # name is part of the trust rule, not a label: the org Cloudflare
+      # identity accepts sign-in only from a job running in this environment.
+      gh_environment: cloudflare-org
+      root: terraform/live/org/cloudflare
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      service_account: ${{ vars.CF_APPLY_SA_ORG }}
+      workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      CLOUDFLARE_MINT_TOKEN: ${{ secrets.CLOUDFLARE_MINT_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write

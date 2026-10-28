@@ -1,0 +1,7 @@
+# Applied by hand with the bootstrap admin identity, after org/gcp/_setup.
+#   terraform init -backend-config="bucket=<management_state_bucket>"
+#   terraform apply -input=false
+
+project_id              = "protech-medusa-stg"
+management_state_bucket = "protech-medusa-mgmt-tfstate"
+management_project_id   = "protech-medusa-mgmt"

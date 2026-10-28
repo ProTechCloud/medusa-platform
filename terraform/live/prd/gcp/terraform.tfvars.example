@@ -1,0 +1,5 @@
+# Applied by CI only. The values below are passed as GitHub variables, not
+# committed — this file documents the shape.
+
+project_id              = "protech-medusa-prd"
+management_state_bucket = "protech-medusa-mgmt-tfstate"
