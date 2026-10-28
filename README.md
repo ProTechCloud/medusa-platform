@@ -121,33 +121,37 @@ Order matters: each reads the previous one's outputs through remote state.
 # root, so a relative path in 3b would miss.
 repo="$(git rev-parse --show-toplevel)"
 
+# Every step below is chained with &&, so the first failure stops everything
+# after it. Not `set -e`: in a terminal it closes the window on the first
+# error, and inside `( … ) || break` the shell switches it off entirely,
+# because the subshell's status is already being tested.
+
 # 3a. org/gcp/_setup — it creates the bucket its own state will live in, so
 #     the first apply has to run without a backend at all. `init -backend=false`
 #     does not do that: it skips backend *initialisation* and then refuses to
 #     apply. The declaration has to be out of the way.
-cd "$repo/terraform/live/org/gcp/_setup"
-cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
-
-mv backend.tf backend.tf.off
-terraform init && terraform apply -input=false          # local state
-#     read the bucket name now, while the local state is the one initialised:
-#     once backend.tf is back, every command but init refuses to run
-bucket="$(terraform output -raw management_state_bucket)"
-mv backend.tf.off backend.tf
-
-#     now move that state into the bucket it just made
-terraform init -migrate-state -backend-config="bucket=$bucket"
+#
+#     The bucket name is read before backend.tf goes back: once it is back,
+#     every command but init refuses to run. If this stops part way, check
+#     whether backend.tf is still named backend.tf.off before running it again.
+cd "$repo/terraform/live/org/gcp/_setup" &&
+  cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars &&
+  mv backend.tf backend.tf.off &&
+  terraform init && terraform apply -input=false &&
+  bucket="$(terraform output -raw management_state_bucket)" &&
+  mv backend.tf.off backend.tf &&
+  terraform init -migrate-state -backend-config="bucket=$bucket"
 
 # 3b. the rest. Each needs its own terraform.tfvars first — org/cloudflare
 #     wants zone_id, the environment roots want project_id,
-#     management_project_id and management_state_bucket.
+#     management_project_id and management_state_bucket. A subshell per root,
+#     so each one starts from the repository root again.
 for root in org/cloudflare/_setup stg/gcp/_setup prd/gcp/_setup; do
-  # A subshell, so each iteration starts from the repository root again.
   (
-    cd "$repo/terraform/live/$root"
-    cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
-    terraform init -backend-config="bucket=<management bucket>"
-    terraform apply -input=false
+    cd "$repo/terraform/live/$root" &&
+      cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars &&
+      terraform init -backend-config="bucket=${bucket:?run 3a first, in this terminal}" &&
+      terraform apply -input=false
   ) || break
 done
 ```

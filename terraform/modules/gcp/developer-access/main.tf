@@ -51,8 +51,16 @@ resource "google_iam_deny_policy" "no_secret_values" {
 # editor does everything to resources, and projectIamAdmin adds managing who
 # has access. Together they are owner without two things nobody needs from
 # here: deleting the project and moving its billing.
+#
+# secretAccessor because neither of those reads a secret's value — editor
+# manages secrets but not their payloads. Owner would have included it, and a
+# recovery that needs the tunnel token should not start with granting it.
 resource "google_project_iam_member" "administration" {
-  for_each = toset(["roles/editor", "roles/resourcemanager.projectIamAdmin"])
+  for_each = toset([
+    "roles/editor",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/secretmanager.secretAccessor",
+  ])
 
   project = var.project_id
   role    = each.value
