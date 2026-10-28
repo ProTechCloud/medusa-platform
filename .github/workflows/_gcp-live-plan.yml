@@ -108,10 +108,10 @@ jobs:
             -backend-config="impersonate_service_account=${{ inputs.spoke_service_account }}"
 
       # -lock=false: a plan writes no state, so it has no reason to take the
-      # lock, and taking it broke applies. live-plan also runs on each push to
-      # dev, beside that push's CD apply. The apply found the lock held (412);
-      # by the time Terraform read who held it, the plan had released it (404),
-      # and that error is not one -lock-timeout retries.
+      # lock, and taking it broke an apply. A pull request's plan can run while
+      # a CD apply of the same stack is in progress. The apply found the lock
+      # held (412); by the time Terraform read who held it, the plan had
+      # released it (404), and that error is not one -lock-timeout retries.
       - name: Plan
         id: plan
         if: steps.scope.outputs.relevant == 'true'
