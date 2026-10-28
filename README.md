@@ -69,7 +69,7 @@ in Google, and `org/cloudflare/_setup` creates resources in Cloudflare. Both are
 `.envrc.local`, copied from the committed example:
 
 ```sh
-cp .envrc.local.example .envrc.local   # then paste the Cloudflare bootstrap token
+cp .envrc.local.example .envrc.local && chmod 600 .envrc.local   # then paste the bootstrap token
 source .envrc.local                    # in every new terminal
 ```
 
@@ -100,8 +100,8 @@ Both created by hand, both for the same reason: something has to exist before th
 that creates everything else can store its own state.
 
 ```sh
-gcloud projects create medusa-management --organization=<ORG_ID>
-gcloud billing projects link medusa-management --billing-account=<BILLING_ACCOUNT>
+gcloud projects create protech-medusa-mgmt --organization=<ORG_ID>
+gcloud billing projects link protech-medusa-mgmt --billing-account=<BILLING_ACCOUNT>
 ```
 
 Then create the group at [groups.google.com](https://groups.google.com), **invite-only**,
@@ -130,11 +130,13 @@ cp terraform.tfvars.example terraform.tfvars && $EDITOR terraform.tfvars
 
 mv backend.tf backend.tf.off
 terraform init && terraform apply -input=false          # local state
+#     read the bucket name now, while the local state is the one initialised:
+#     once backend.tf is back, every command but init refuses to run
+bucket="$(terraform output -raw management_state_bucket)"
 mv backend.tf.off backend.tf
 
 #     now move that state into the bucket it just made
-terraform init -migrate-state \
-  -backend-config="bucket=$(terraform output -raw management_state_bucket)"
+terraform init -migrate-state -backend-config="bucket=$bucket"
 
 # 3b. the rest. Each needs its own terraform.tfvars first — org/cloudflare
 #     wants zone_id, the environment roots want project_id,
@@ -188,12 +190,12 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
 
 Two secrets, and only two — both Cloudflare, because Cloudflare's API has no workload
-identity federation. Both are created by `org/cloudflare/_setup`; you copy each value in
-once with `terraform output -raw`.
+identity federation. The plan token comes from `org/cloudflare/_setup` and is copied in
+once with `terraform output -raw`; the mint token is made by hand, for the reason below.
 
 | Secret | Scope | Where its value comes from |
 |---|---|---|
-| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | `org/cloudflare/_setup` → `mint_token`. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
+| `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | Made by hand in the Cloudflare dashboard, from the Create Additional Tokens template under Manage Account → API Tokens. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
 | `CLOUDFLARE_PLAN_TOKEN` | repository secret | `org/cloudflare/_setup` → `plan_token`. Read-only, so a leak buys nothing but reading records that are already public. |
 
 **Every Cloudflare token here is account-owned, not user-owned.** They belong to the
@@ -220,9 +222,9 @@ Keep the mint token separate from the bootstrap token even though the policy is 
 One lives in CI and one lives with a person, so they are rotated for different reasons.
 
 A third token exists and is never stored in GitHub: the **bootstrap token** that applies
-`org/cloudflare/_setup`. It is Cloudflare's "Create Additional Tokens" template —
-`API Tokens Write`, scope User, no other permission — and it lives with the person who
-applies that root. Narrow surface, not low privilege: Cloudflare's own documentation
+`org/cloudflare/_setup`. It is an **account** token with `Account API Tokens Write`,
+scoped to the account, and no other permission — the same policy as the mint token — and
+it lives with the person who applies that root. Narrow surface, not low privilege: Cloudflare's own documentation
 says such a token "can create tokens with access to any of a user's resources", so
 rotating it is the lever to pull if anything leaks.
 
@@ -255,13 +257,14 @@ written under an identity that can add a version to that one secret and cannot r
 back. The only value the GCP roots write into state is the literal string
 `REPLACE_ME_VIA_SECRET_MANAGER`.
 
-**Two secret values do reach state**, both Cloudflare tokens in `org/cloudflare/_setup`,
-listed here because the standard asks for exactly that. Only the bootstrap admin can read
+**One secret value does reach state**: the Cloudflare plan token,
+`cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
+standard asks for exactly that. The mint token is made by hand and lives only in GitHub. Only the bootstrap admin can read
 that prefix — the IAM condition in `org/gcp/_setup` limits the Cloudflare CI identities to
 `org/cloudflare/live/`.
 
-Terraform creates both, so their policies are a reviewable diff rather than something
-clicked in a dashboard. That is the trade: a value in a state file nobody but the
+Terraform creates it, so its policy is a reviewable diff rather than something clicked in
+a dashboard. That is the trade: a value in a state file nobody but the
 bootstrap admin can read, against a permission nobody at all could review.
 
 Marking an output `sensitive` keeps a value out of the logs. It does not encrypt it in
@@ -278,7 +281,7 @@ Sign in with your Google account. No keys are issued, to anyone, anywhere.
 
 ```sh
 gcloud auth login
-gcloud config set project medusa-stg
+gcloud config set project protech-medusa-stg
 gcloud compute instances list
 ```
 

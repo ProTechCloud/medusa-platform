@@ -34,7 +34,7 @@ pre-push:
     # CI already covers it, and finding out here is cheaper.
     terraform-validate:
       run: |
-        set -euo pipefail
+        set -eu
         for dir in $(find terraform/live -name versions.tf -exec dirname {} \;); do
           echo "validate $dir"
           terraform -chdir="$dir" init -backend=false -input=false >/dev/null
@@ -56,7 +56,7 @@ commit-msg:
     # is enforced where it is written, not remembered at merge time.
     conventional:
       run: |
-        set -euo pipefail
+        set -eu
         subject=$(head -1 "{1}")
         case "$subject" in
           # A fixup or a merge is not a release note; let them through.

@@ -38,12 +38,23 @@ resource "google_iam_deny_policy" "no_secret_values" {
 # point: an incident asks "who did this", and the answer cannot be "somebody in
 # a group".
 #
-# owner rather than something narrower, because this role exists for the cases
-# nobody listed in advance — a stuck lock, a half-applied change, a resource CI
-# cannot reach. A narrower role would be a list of guesses that runs out
-# exactly when it is needed.
+# Broad on purpose, because this role exists for the cases nobody listed in
+# advance — a stuck lock, a half-applied change, a resource CI cannot reach.
+#
+# Not roles/owner, though, because owner cannot be granted this way. Google's
+# setIamPolicy refuses to make a *user* an owner: that goes through the
+# console's invitation, which the person has to accept. The apply fails on
+# this one binding and creates everything around it, so the role silently does
+# not exist — which is what happened here, and why the org state held a
+# read-only binding for each project and no administration binding at all.
+#
+# editor does everything to resources, and projectIamAdmin adds managing who
+# has access. Together they are owner without two things nobody needs from
+# here: deleting the project and moving its billing.
 resource "google_project_iam_member" "administration" {
+  for_each = toset(["roles/editor", "roles/resourcemanager.projectIamAdmin"])
+
   project = var.project_id
-  role    = "roles/owner"
+  role    = each.value
   member  = var.administrator
 }

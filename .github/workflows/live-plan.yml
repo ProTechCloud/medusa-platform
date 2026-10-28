@@ -134,13 +134,12 @@ jobs:
       # A stack that was not touched uploaded nothing, so a missing artifact
       # is the signal that there is nothing to report for it.
       #
-      # continue-on-error because the action fails the step when the pattern
-      # matches nothing at all — which is the ordinary case for a docs-only
-      # pull request. Without it this job goes red there, and the script that
-      # deletes the stale comment never runs. The script already reads a
-      # missing file as "not touched", so there is nothing else to handle.
+      # No continue-on-error. At this pin a pattern that matches nothing
+      # succeeds with "Total of 0 artifact(s)", so a docs-only pull request
+      # already passes. What continue-on-error would add is hiding a real
+      # download failure — and then the script sees no plans, reads that as
+      # "nothing in scope", and deletes the comment while the job goes green.
       - name: Collect the plans
-        continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: plan-*

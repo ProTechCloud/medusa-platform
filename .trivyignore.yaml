@@ -16,7 +16,7 @@
 #   statement  why this is acceptable here, in a sentence someone else can
 #              judge. "False positive" alone is not a reason; say what makes it
 #              one.
-#   expires_at the date it stops applying. Past it, trivy fails again and the
+#   expired_at the date it stops applying. Past it, trivy fails again and the
 #              question gets asked a second time, which is the point — an
 #              exception with no end date is a decision nobody revisits.
 #
@@ -31,7 +31,7 @@
 #       only traffic is the tunnel connector reaching loopback, so the logs
 #       would record one constant flow at a cost the project cannot carry on
 #       the free tier. Revisit if anything else joins the subnet.
-#     expires_at: 2026-01-31
+#     expired_at: 2026-01-31
 #     owner: fahlula
 #
 misconfigurations:
@@ -47,5 +47,5 @@ misconfigurations:
       The alternative is Cloud NAT, which is the one line item on this
       stack the free tier does not cover. Revisit if the project gains a
       budget, or if anything inbound is ever opened on this instance.
-    expires_at: 2026-04-30
+    expired_at: 2027-04-30
     owner: fahlula

@@ -2,6 +2,6 @@
 #   terraform init -backend-config="bucket=<management_state_bucket>"
 #   terraform apply -input=false
 
-project_id              = "medusa-prd"
-management_state_bucket = "medusa-management-tfstate"
+project_id              = "protech-medusa-prd"
+management_state_bucket = "protech-medusa-mgmt-tfstate"
 management_project_id   = "protech-medusa-mgmt"

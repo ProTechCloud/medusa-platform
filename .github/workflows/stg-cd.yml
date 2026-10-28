@@ -71,7 +71,12 @@ jobs:
       name: stg
       deployment: false
     steps:
-      - name: Mint a read-only Cloudflare token
+      # Tunnel Write, not Read. GET /cfd_tunnel/{id}/token returns the
+      # credential a connector runs with, and Cloudflare requires a write
+      # permission for it — a Read token gets no token back, and this job
+      # would stop before writing the secret. The token lives for this job
+      # and is revoked at the end, like every other per-job token.
+      - name: Mint a Cloudflare token that can read the tunnel's credential
         id: cf
         shell: bash
         env:
@@ -81,11 +86,12 @@ jobs:
           set -euo pipefail
           groups=$(curl -sS -H "Authorization: Bearer $MINT_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/tokens/permission_groups")
-          tunnel_read=$(echo "$groups" | jq -r '.result[] | select(.name=="Cloudflare Tunnel Read") | .id' | head -1)
+          tunnel_write=$(echo "$groups" | jq -r '.result[] | select(.name=="Cloudflare Tunnel Write") | .id' | head -1)
+          [ -n "$tunnel_write" ] || { echo "::error::no Cloudflare Tunnel Write permission group"; exit 1; }
 
           body=$(jq -n \
             --arg name "medusa-tunnel-token-${{ github.run_id }}-${{ github.run_attempt }}" \
-            --arg acct "$ACCOUNT_ID" --arg g "$tunnel_read" \
+            --arg acct "$ACCOUNT_ID" --arg g "$tunnel_write" \
             '{name: $name, policies: [{effect: "allow",
               resources: {("com.cloudflare.api.account." + $acct): "*"},
               permission_groups: [{id: $g}]}]}')
