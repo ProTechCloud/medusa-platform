@@ -74,14 +74,6 @@ variable "apis" {
   type        = list(string)
   default = [
     "compute.googleapis.com",
-
-    # Both agents on the VM are enabled by instance metadata and both write
-    # through these APIs. Neither was enabled, which made the metadata and the
-    # logWriter binding inert: the box was shipping nothing, silently, because
-    # a disabled API fails the agent's write rather than the apply.
-    "logging.googleapis.com",
-    "monitoring.googleapis.com",
-
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
     "iap.googleapis.com",

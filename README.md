@@ -3,13 +3,6 @@
 Terraform for every environment of [`medusa-backend`](https://github.com/ProTechCloud/medusa-backend):
 a Cloudflare Tunnel, a small GCE instance behind it, and the keyless identities CI uses.
 
-![How a job in GitHub reaches a cloud, and what it may touch when it gets there](docs/architecture.svg)
-
-The source is [`docs/architecture.mmd`](docs/architecture.mmd). Edit that and re-render:
-`npx -y @mermaid-js/mermaid-cli@11.4.2 -i docs/architecture.mmd -o docs/architecture.svg -b white`.
-
-When something is on fire: [`docs/runbooks.md`](docs/runbooks.md).
-
 ## Layout
 
 ```
@@ -192,7 +185,7 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_PLAN_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `plan_spoke` |
 | `GCP_APPLY_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `apply_spoke` |
 | `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
-| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard. `CLOUDFLARE_DOMAIN` is read by the GCP roots as well: the uptime check is built from it, so it calls `api-<env>-medusa.<domain>` — the address a user calls |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
 
 Two secrets, and only two — both Cloudflare, because Cloudflare's API has no workload
 identity federation. Both are created by `org/cloudflare/_setup`; you copy each value in
@@ -308,39 +301,6 @@ deny policy says, because the caller on that path is the VM and not the person.
 The administration role is one account and not a group, so every change made outside CI
 has exactly one owner. It sits outside the deny policy — it is the role for the cases
 nobody listed in advance.
-
-## Watching it
-
-Four alerts, all by email, all defined in `terraform/live/<env>/gcp` through
-`modules/gcp/monitoring`:
-
-| Alert | Fires when |
-|---|---|
-| API is not answering `/health` | the uptime check fails from more than one region over twenty minutes |
-| VM CPU is high | above 80% for ten minutes |
-| VM memory is high | above 85% for ten minutes |
-| VM disk is filling up | the writable partition is above 85% for ten minutes |
-
-The check calls the public hostname rather than the instance. The firewall admits nothing
-but the IAP range, so there is no direct route to check — and a check that went around
-Cloudflare would stay green through a broken tunnel or an expired certificate, which are
-the failures a user meets first.
-
-Alerts go to the address in `administrator`, the one input in `org/gcp/_setup` that names a
-person. There is no second place to set a recipient, so the account that owns changes made
-outside CI is the account the alerts reach, and the two cannot drift apart.
-
-CPU is reported by the hypervisor and needs nothing on the box. Memory and disk can only be
-seen from inside it, and they arrive because three things line up: the instance metadata
-asks Container-Optimized OS to run its monitoring agent, the instance identity holds
-`roles/monitoring.metricWriter`, and `monitoring.googleapis.com` is enabled on the project.
-Remove any one of the three and those two policies sit there looking configured and never
-fire.
-
-> The disk alert names one device, `sda1`. COS keeps its root filesystem read-only and
-> essentially full, so an alert across every device would fire on the first sample and never
-> clear. Confirm the device label in Metrics Explorer once the VM is running, and change the
-> `disk_device` input if this instance reports another name.
 
 ## Pipelines
 

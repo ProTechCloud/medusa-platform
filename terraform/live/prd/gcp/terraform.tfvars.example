@@ -3,4 +3,3 @@
 
 project_id              = "medusa-prd"
 management_state_bucket = "medusa-management-tfstate"
-domain                  = "example.site"
