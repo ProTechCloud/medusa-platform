@@ -103,6 +103,8 @@ jobs:
         working-directory: ${{ inputs.root }}
         run: terraform init -lockfile=readonly -backend-config="bucket=${{ inputs.state_bucket }}"
 
+      # -lock=false: a plan writes no state, so it has no reason to take the
+      # lock. See _gcp-live-plan.yml for the race that taking it caused.
       - name: Plan
         id: plan
         if: steps.scope.outputs.relevant == 'true'
@@ -114,7 +116,7 @@ jobs:
           TF_VAR_domain: ${{ vars.CLOUDFLARE_DOMAIN }}
         run: |
           set -o pipefail
-          terraform plan -no-color -input=false -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
+          terraform plan -no-color -input=false -lock=false -out=tfplan 2>&1 | tee plan.txt
 
       - name: Upload the plan
         if: steps.scope.outputs.relevant == 'true'
