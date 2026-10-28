@@ -18,9 +18,12 @@ locals {
 # just wrote. Deny makes the one-way street a guarantee rather than a property
 # of the role list.
 resource "google_iam_deny_policy" "no_secret_values" {
-  parent       = local.deny_parent
-  name         = "medusa-no-secret-values"
-  display_name = "Plan and the token writer may see that a secret exists, never its value"
+  parent = local.deny_parent
+  name   = "medusa-no-secret-values"
+  # 63 characters at most — the API's limit. The longer wording this had
+  # failed every apply with a 400, so this policy never existed until it was
+  # shortened, and nothing but the apply output said so.
+  display_name = "Plan and token writer may see a secret exists, never its value"
 
   rules {
     deny_rule {
