@@ -68,15 +68,37 @@ jobs:
           set -euo pipefail
           groups=$(curl -sS -H "Authorization: Bearer $MINT_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/tokens/permission_groups")
-          id_of() { echo "$groups" | jq -r --arg n "$1" '.result[] | select(.name==$n) | .id' | head -1; }
+          # Stop on Cloudflare's own error, not on what it leaves behind. A
+          # refused call has no .result, so without this every lookup below
+          # fails with "Cannot iterate over null" and the reason only shows
+          # after the token request, at the bottom of the log.
+          if [ "$(echo "$groups" | jq -r '.success')" != "true" ]; then
+            echo "::error::Cloudflare refused CLOUDFLARE_MINT_TOKEN. It must be an account token" \
+              "with Account API Tokens Write, made under Manage Account → API Tokens;" \
+              "a user token from My Profile is refused here."
+            echo "$groups" | jq '.errors'
+            exit 1
+          fi
+          # A name that matches nothing would leave an empty id in the policy,
+          # and Cloudflare's answer to that names neither the group nor the
+          # field. Failing here names the group.
+          id_of() {
+            id=$(echo "$groups" | jq -r --arg n "$1" '.result[] | select(.name==$n) | .id' | head -1)
+            [ -n "$id" ] || { echo "::error::No Cloudflare permission group named \"$1\"" >&2; return 1; }
+            echo "$id"
+          }
+          tunnel_write=$(id_of 'Cloudflare Tunnel Write')
+          zone_read=$(id_of 'Zone Read')
+          dns_write=$(id_of 'DNS Write')
+          settings_write=$(id_of 'Zone Settings Write')
 
           body=$(jq -n \
             --arg name "medusa-apply-${{ inputs.stack }}-${{ github.run_id }}-${{ github.run_attempt }}" \
             --arg acct "$ACCOUNT_ID" --arg zone "$ZONE_ID" \
-            --arg tunnel_write "$(id_of 'Cloudflare Tunnel Write')" \
-            --arg zone_read "$(id_of 'Zone Read')" \
-            --arg dns_write "$(id_of 'DNS Write')" \
-            --arg settings_write "$(id_of 'Zone Settings Write')" \
+            --arg tunnel_write "$tunnel_write" \
+            --arg zone_read "$zone_read" \
+            --arg dns_write "$dns_write" \
+            --arg settings_write "$settings_write" \
             '{name: $name,
               policies: [
                 {effect: "allow",
