@@ -4,10 +4,10 @@
 # Cloudflare's 81053: "An A, AAAA, or CNAME record with that host already
 # exists."
 #
-# Adopted rather than deleted by hand, so the switch is a reviewed plan: the
-# record keeps its id, and its content moves from the old tunnel to this one.
-# That move is what takes stg traffic off the old machine, which is still
-# connected to the old tunnel and serving.
+# Adopted rather than deleted by hand, so every change to it is a reviewed
+# plan and the record keeps its id. Adopting it changes nothing: its target
+# stays on the old tunnel until the cutover described at local.dns_target in
+# main.tf.
 #
 # Once applied this block is a no-op, and it can be removed in any later change.
 import {
