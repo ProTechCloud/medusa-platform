@@ -107,6 +107,11 @@ jobs:
             -backend-config="bucket=${{ inputs.state_bucket }}" \
             -backend-config="impersonate_service_account=${{ inputs.spoke_service_account }}"
 
+      # -lock=false: a plan writes no state, so it has no reason to take the
+      # lock, and taking it broke an apply. A pull request's plan can run while
+      # a CD apply of the same stack is in progress. The apply found the lock
+      # held (412); by the time Terraform read who held it, the plan had
+      # released it (404), and that error is not one -lock-timeout retries.
       - name: Plan
         id: plan
         if: steps.scope.outputs.relevant == 'true'
@@ -120,7 +125,7 @@ jobs:
           # pipefail is load-bearing: without it the step reports tee's exit
           # status, and a plan that errored shows as a green check.
           set -o pipefail
-          terraform plan -no-color -input=false -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
+          terraform plan -no-color -input=false -lock=false -out=tfplan 2>&1 | tee plan.txt
 
       # The plan text travels as an artifact, not as a comment. Naming it
       # after the stack is what lets the aggregator label each section and

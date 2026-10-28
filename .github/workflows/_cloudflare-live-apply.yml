@@ -139,30 +139,15 @@ jobs:
         working-directory: ${{ inputs.root }}
         run: terraform init -lockfile=readonly -backend-config="bucket=${{ inputs.state_bucket }}"
 
-      - name: Re-plan
-        id: replan
+      # No separate plan step: apply plans against the current state on its
+      # own. See _gcp-live-apply.yml.
+      - name: Apply
         working-directory: ${{ inputs.root }}
-        shell: bash
         env:
           TF_VAR_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
           TF_VAR_domain: ${{ vars.CLOUDFLARE_DOMAIN }}
-        run: |
-          set +e
-          terraform plan -no-color -input=false -lock-timeout=5m -detailed-exitcode -out=tfplan
-          code=$?
-          set -e
-          case "$code" in
-            0) echo "changed=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No changes. Skipping apply." ;;
-            2) echo "changed=true"  >> "$GITHUB_OUTPUT" ;;
-            *) echo "::error::Plan failed with exit code $code"; exit "$code" ;;
-          esac
-
-      - name: Apply
-        if: steps.replan.outputs.changed == 'true'
-        working-directory: ${{ inputs.root }}
-        run: terraform apply -input=false -lock-timeout=5m -no-color tfplan
+        run: terraform apply -auto-approve -input=false -lock-timeout=5m -no-color
 
       - name: Revoke the token
         if: always() && steps.cf.outputs.token_id != ''

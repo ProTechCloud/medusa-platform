@@ -36,10 +36,6 @@ on:
       audience:
         required: true
         type: string
-    outputs:
-      changed:
-        description: Whether this run applied anything.
-        value: ${{ jobs.apply.outputs.changed }}
 
 permissions:
   contents: read
@@ -68,9 +64,6 @@ jobs:
       group: apply-${{ inputs.environment }}
       cancel-in-progress: false
 
-    outputs:
-      changed: ${{ steps.replan.outputs.changed }}
-
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -94,31 +87,13 @@ jobs:
             -backend-config="bucket=${{ inputs.state_bucket }}" \
             -backend-config="impersonate_service_account=${{ inputs.spoke_service_account }}"
 
-      # The plan a reviewer approved was made against the state as it was
-      # before the merge. Applying that saved plan would apply a stale view.
-      # Planning again here means what is applied is what is true at merge
-      # time — and a detailed exit code tells us whether to apply at all.
-      - name: Re-plan
-        id: replan
+      # No separate plan step. The plan a reviewer approved was made against
+      # the state before the merge, and apply plans again on its own against
+      # the state as it is now; with nothing to change it changes nothing.
+      - name: Apply
         working-directory: ${{ inputs.root }}
-        shell: bash
         env:
           TF_VAR_project_id: ${{ inputs.project_id }}
           TF_VAR_management_state_bucket: ${{ inputs.management_state_bucket }}
           TF_VAR_spoke_service_account: ${{ inputs.spoke_service_account }}
-        run: |
-          set +e
-          terraform plan -no-color -input=false -lock-timeout=5m -detailed-exitcode -out=tfplan
-          code=$?
-          set -e
-          case "$code" in
-            0) echo "changed=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No changes. Skipping apply." ;;
-            2) echo "changed=true"  >> "$GITHUB_OUTPUT" ;;
-            *) echo "::error::Plan failed with exit code $code"; exit "$code" ;;
-          esac
-
-      - name: Apply
-        if: steps.replan.outputs.changed == 'true'
-        working-directory: ${{ inputs.root }}
-        run: terraform apply -input=false -lock-timeout=5m -no-color tfplan
+        run: terraform apply -auto-approve -input=false -lock-timeout=5m -no-color

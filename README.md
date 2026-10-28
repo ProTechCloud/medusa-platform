@@ -332,5 +332,5 @@ Branch protection requires `Plan stg / plan`, `Plan prd / plan` and `Code Qualit
 A check that never runs counts as passed, which is why the plan jobs always run and why the
 summary job exists at all.
 
-Every apply re-plans first and skips when nothing changed: the plan a reviewer approved was
-made against the state as it was *before* the merge.
+Every apply runs `terraform apply` directly, which plans against the state at merge time:
+the plan a reviewer approved was made against the state as it was *before* the merge.

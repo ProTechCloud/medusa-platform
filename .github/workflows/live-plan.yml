@@ -9,12 +9,14 @@
 # No path filter on the trigger. GitHub treats a required check that never ran
 # as passed, so filtering here would turn "nothing to plan" into "protection
 # satisfied". Each plan job decides for itself whether there is work.
+#
+# Pull requests only. On a push to dev the CD workflows plan and apply that
+# same commit, so a plan here would add nothing; it only ran beside them and
+# held their state lock at the moment the apply needed it.
 name: live-plan
 
 on:
   pull_request:
-    branches: [dev]
-  push:
     branches: [dev]
 
 permissions: {}
