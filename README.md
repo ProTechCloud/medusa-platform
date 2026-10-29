@@ -334,8 +334,8 @@ back. The only value the GCP roots write into state is the literal string
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
 standard asks for exactly that. The mint token is made by hand and lives only in GitHub. Only the bootstrap admin can read
-that prefix — the IAM condition in `org/gcp/_setup` limits the Cloudflare CI identities to
-`org/cloudflare/live/`.
+that prefix — the IAM conditions in `org/gcp/_setup` limit the GitHub identities of the
+Cloudflare org stack to `org/cloudflare/live/`.
 
 Terraform creates it, so its policy is a reviewable diff rather than something clicked in
 a dashboard. That is the trade: a value in a state file nobody but the

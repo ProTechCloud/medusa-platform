@@ -59,11 +59,3 @@ output "tunnel_token_hubs" {
 output "backend_deploy_hub" {
   value = module.backend_deploy_hub.email
 }
-
-output "cloudflare_plan_identities" {
-  value = { for k, sa in google_service_account.cloudflare_plan : k => sa.email }
-}
-
-output "cloudflare_apply_identities" {
-  value = { for k, sa in google_service_account.cloudflare_apply : k => sa.email }
-}
