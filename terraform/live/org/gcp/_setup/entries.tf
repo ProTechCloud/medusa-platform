@@ -12,6 +12,8 @@ locals {
     gcp_apply        = ".github/workflows/_gcp-live-apply.yml"
     cloudflare_plan  = ".github/workflows/_cloudflare-live-plan.yml"
     cloudflare_apply = ".github/workflows/_cloudflare-live-apply.yml"
+    posthog_plan     = ".github/workflows/_posthog-live-plan.yml"
+    posthog_apply    = ".github/workflows/_posthog-live-apply.yml"
     backend_deploy   = ".github/workflows/deploy-stg.yml"
     stg_cd           = ".github/workflows/stg-cd.yml"
     prd_cd           = ".github/workflows/prd-cd.yml"
@@ -49,6 +51,15 @@ locals {
     stg = ["${local.platform_repo}|${local.wf.cloudflare_apply}|stg|refs/heads/dev"]
     prd = ["${local.platform_repo}|${local.wf.cloudflare_apply}|prd|refs/heads/dev"]
   }
+
+  # PostHog is organisation-wide like org/cloudflare, so its apply gets a
+  # dedicated environment for the same reason.
+  posthog_plan_entries = [
+    "${local.platform_repo}|${local.wf.posthog_plan}|pull-request",
+    "${local.platform_repo}|${local.wf.posthog_plan}|refs/heads/dev",
+  ]
+
+  posthog_apply_entries = ["${local.platform_repo}|${local.wf.posthog_apply}|posthog-org|refs/heads/dev"]
 
   # The tunnel-token step runs directly in stg-cd.yml rather than through a
   # shared workflow, so its job_workflow_ref names that file. Pointing it at

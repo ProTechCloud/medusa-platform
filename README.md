@@ -11,6 +11,7 @@ terraform/
     org/gcp/_setup            projects, state bucket, identity pool, hubs, developer roles
     org/cloudflare/_setup     zone-wide security settings
     org/cloudflare            DNS that belongs to no environment
+    org/posthog               the PostHog project and who administers it
     stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
     stg/gcp                   the stg infrastructure
     stg/cloudflare            stg tunnel and DNS
@@ -38,17 +39,33 @@ added without showing as a diff here.
 Three places must be told to make the second hop, because they authenticate separately:
 the `google` provider, the `gcs` backend at `init`, and each `terraform_remote_state`.
 
+**A root that manages nothing in Google gets no service account.** The Cloudflare and
+PostHog roots need Google only to open their state, so `org/gcp/_setup` binds the GitHub
+identity itself — a `principalSet` on the trust rule below — to that root's state prefix in
+the management bucket, and to the bucket's key:
+
+```
+GitHub OIDC ──▶ identity pool ──▶ the management bucket, under this stack's prefix only
+```
+
+There is no hub, no spoke and no impersonation, which is what Google recommends where the
+resource accepts a federated principal. The credential is the federated token itself, and it
+lives five minutes, because it derives from GitHub's OIDC token: a plan or apply of these
+roots has to finish in that window, which today takes seconds.
+
 ### What each trust rule requires
 
 A `principalSet` matches one attribute, but the standard needs several claims to hold at
 once. The pool therefore builds composite attributes, and the bindings demand an exact
 match of the whole string — there is no wildcard anywhere.
 
-| Hub | Must all be true |
+| Identity | Must all be true |
 |---|---|
-| plan | this repo · the shared plan workflow · a PR or `dev` |
-| apply | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
-| backend deploy | the app repo · its deploy workflow · `stg` environment · `refs/heads/stg` |
+| plan hub | this repo · the shared plan workflow · a PR or `dev` |
+| apply hub | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
+| backend deploy hub | the app repo · its deploy workflow · `stg` environment · `refs/heads/stg` |
+| Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
+| Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
 which any pull request may add; pinning it would pin nothing.
@@ -194,22 +211,25 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_PROJECT_STG` / `_PRD` | `environment_projects` |
 | `GCP_PLAN_HUB_STG` / `_PRD` | `plan_hubs` |
 | `GCP_APPLY_HUB_STG` / `_PRD` | `apply_hubs` |
-| `CF_PLAN_SA_ORG` / `_STG` / `_PRD` | `cloudflare_plan_identities` |
-| `CF_APPLY_SA_ORG` / `_STG` / `_PRD` | `cloudflare_apply_identities` |
 | `STATE_BUCKET_STG` / `_PRD` | `<env>/gcp/_setup` → `state_bucket` |
 | `GCP_PLAN_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `plan_spoke` |
 | `GCP_APPLY_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `apply_spoke` |
 | `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
+| `POSTHOG_ORGANIZATION_ID` | PostHog → Settings → Organization → General |
+| `POSTHOG_ADMINISTRATOR_EMAIL` | the existing member `org/posthog` raises to admin |
 
-Two secrets, and only two — both Cloudflare, because Cloudflare's API has no workload
-identity federation. The plan token comes from `org/cloudflare/_setup` and is copied in
+Four secrets — two Cloudflare and two PostHog, because neither API has workload identity
+federation. The Cloudflare plan token comes from `org/cloudflare/_setup` and is copied in
 once with `terraform output -raw`; the mint token is made by hand, for the reason below.
+The PostHog keys are made by hand too: see step 6.
 
 | Secret | Scope | Where its value comes from |
 |---|---|---|
 | `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | Made by hand in the Cloudflare dashboard, from the Create Additional Tokens template under Manage Account → API Tokens. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
 | `CLOUDFLARE_PLAN_TOKEN` | repository secret | `org/cloudflare/_setup` → `plan_token`. Read-only, so a leak buys nothing but reading records that are already public. |
+| `POSTHOG_PLAN_API_KEY` | repository secret | A personal API key, read scopes only. Reachable from pull-request code, so its scopes are the whole defence. |
+| `POSTHOG_APPLY_API_KEY` | **environment** secret on `posthog-org` | A personal API key that can also write projects and memberships. Environment-only for the same reason as the mint token. |
 
 **Every Cloudflare token here is account-owned, not user-owned.** They belong to the
 Cloudflare account rather than to a person, so nobody leaving the team takes CI with them,
@@ -241,8 +261,8 @@ it lives with the person who applies that root. Narrow surface, not low privileg
 says such a token "can create tokens with access to any of a user's resources", so
 rotating it is the lever to pull if anything leaks.
 
-GitHub **environments** `stg`, `prd` and `cloudflare-org` must exist; their names are part
-of the trust rules, not labels.
+GitHub **environments** `stg`, `prd`, `cloudflare-org` and `posthog-org` must exist; their
+names are part of the trust rules, not labels. Each accepts deployments from `dev` only.
 
 ### 5. Fill in the secret values
 
@@ -261,6 +281,47 @@ that can read the bootstrap account's home directory. `--data-file=-` with no
 pipe reads from the terminal instead.
 
 The tunnel token is the exception — `stg-cd` writes it automatically after each apply.
+
+### 6. PostHog
+
+PostHog has no API to create an organization or invite a person, so four things happen
+once, by hand, before `org/posthog` can run:
+
+1. **Sign up** at [PostHog Cloud US](https://us.posthog.com/signup) and name the
+   organization `medusa`. Leave the project sign-up creates: `org/posthog` imports it and
+   renames it, so its project token — the one SDKs send with — never changes.
+2. **Invite** the administrator from Settings → Organization → Members, as a member.
+   `org/posthog` raises an existing member to admin; it cannot find someone who has not
+   accepted, and the plan fails until they have.
+3. **Create two personal API keys** under Account settings → Personal API keys, each
+   limited to the `medusa` organization:
+
+   | Key | Scopes |
+   |---|---|
+   | plan → `POSTHOG_PLAN_API_KEY` | `organization:read`, `organization_member:read`, `project:read`, `user:read` |
+   | apply → `POSTHOG_APPLY_API_KEY` | the four above, plus `organization_member:write`, `project:write` |
+
+   Store them from a terminal of your own (`gh secret set …`), never pasted anywhere else.
+4. **Create the empty state** as the bootstrap admin, after `source .envrc.local`:
+
+   ```sh
+   cd terraform/live/org/posthog
+   terraform init -backend-config="bucket=<management state bucket>"
+   ```
+
+   The first run of a new root writes an empty state object. The plan identity can read
+   this prefix and write only its lock, so a first plan from CI is refused with
+   `storage.objects.create` denied. That refusal is the design; the bootstrap admin
+   creates the object once.
+
+**PostHog API keys are personal.** Both keys belong to **Fabiana Lula**, the organization's
+owner, who signed up. Unlike the
+Cloudflare tokens they cannot be owned by the organization: if that account leaves or loses
+access, both keys stop working, and new ones must be made by another owner and swapped in.
+
+**One project serves every environment.** `stg` and `prd` are not separate projects: the
+environment travels on the data — `deployment.environment.name` on traces, `environment` on
+log lines — and is a filter in PostHog, not a second project to keep in step.
 
 ## Secrets and state
 
@@ -322,10 +383,10 @@ nobody listed in advance.
 
 | Workflow | When | What |
 |---|---|---|
-| `live-plan` | every PR | plans all five stacks; `Plan stg` and `Plan prd` always report, Cloudflare stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
+| `live-plan` | every PR | plans all six stacks; `Plan stg` and `Plan prd` always report, the Cloudflare and PostHog stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks, trivy → **Code Quality Summary** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
-| `org-cd` | merge to `dev` | applies org Cloudflare |
+| `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog |
 | `{gcp,cloudflare}-prd-live-apply` | every push | **switched off** — shows as skipped |
 
 Branch protection requires `Plan stg / plan`, `Plan prd / plan` and `Code Quality Summary`.
