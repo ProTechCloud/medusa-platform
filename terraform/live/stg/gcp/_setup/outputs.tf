@@ -26,7 +26,7 @@ output "tunnel_token_writer" {
 }
 
 output "deploy_spoke" {
-  description = "Identity medusa-backend deploys as. Empty outside stg."
+  description = "Identity medusa-app deploys as. Empty outside stg."
   value       = one(module.deploy_spoke[*].email)
 }
 

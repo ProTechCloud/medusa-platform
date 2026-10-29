@@ -36,7 +36,7 @@ module "backend_deploy_hub" {
 
   project_id  = var.management_project_id
   name        = "medusa-stg-deploy-hub"
-  description = "medusa-backend deploy entry point"
+  description = "medusa-app deploy entry point"
 
   pool_name      = google_iam_workload_identity_pool.github.name
   attribute      = "apply_entry"
