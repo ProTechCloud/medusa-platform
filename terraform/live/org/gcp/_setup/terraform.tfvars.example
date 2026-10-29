@@ -24,7 +24,7 @@ environment_projects = {
 
 github_owner        = "ProTechCloud"
 platform_repository = "medusa-platform"
-backend_repository  = "medusa-backend"
+backend_repository  = "medusa-app"
 
 # Created by hand at groups.google.com, invite-only. Google exposes no API for
 # creating consumer groups, and this organization has no directory for the

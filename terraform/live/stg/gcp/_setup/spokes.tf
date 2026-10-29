@@ -138,7 +138,7 @@ module "deploy_spoke" {
 
   project_id  = var.project_id
   name        = "medusa-deploy"
-  description = "medusa-backend deploy: push an image, roll out the API instance."
+  description = "medusa-app deploy: push an image, roll out the API instance."
   hub_member  = local.backend_deploy_hub
 
   roles = [

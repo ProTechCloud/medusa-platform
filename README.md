@@ -1,6 +1,6 @@
 # medusa-platform
 
-Terraform for every environment of [`medusa-backend`](https://github.com/ProTechCloud/medusa-backend):
+Terraform for every environment of [`medusa-app`](https://github.com/ProTechCloud/medusa-app):
 a Cloudflare Tunnel, a small GCE instance behind it, and the keyless identities CI uses.
 
 ## Layout
