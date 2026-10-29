@@ -14,9 +14,6 @@ on:
         description: Management bucket. Cloudflare state is not environment workload state.
         required: true
         type: string
-      service_account:
-        required: true
-        type: string
       workload_identity_provider:
         required: true
         type: string
@@ -91,11 +88,12 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
+      # No service account: the federated GitHub identity reads this stack's
+      # state prefix directly (state_access.tf in org/gcp/_setup).
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         if: steps.scope.outputs.relevant == 'true'
         with:
           workload_identity_provider: ${{ inputs.workload_identity_provider }}
-          service_account: ${{ inputs.service_account }}
           audience: ${{ inputs.audience }}
 
       - name: Init

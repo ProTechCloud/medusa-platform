@@ -75,7 +75,6 @@ jobs:
       stack: org
       root: terraform/live/org/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      service_account: ${{ vars.CF_PLAN_SA_ORG }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
     secrets:
@@ -94,7 +93,6 @@ jobs:
       stack: stg
       root: terraform/live/stg/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      service_account: ${{ vars.CF_PLAN_SA_STG }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
     secrets:
@@ -113,7 +111,6 @@ jobs:
       stack: prd
       root: terraform/live/prd/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      service_account: ${{ vars.CF_PLAN_SA_PRD }}
       workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
     secrets:
@@ -122,11 +119,29 @@ jobs:
       contents: read
       id-token: write
 
+  posthog-org:
+    name: Plan org posthog
+    uses: ./.github/workflows/_posthog-live-plan.yml
+    concurrency:
+      group: plan-posthog-org-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    with:
+      stack: org
+      root: terraform/live/org/posthog
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      workload_identity_provider: ${{ vars.GCP_PLAN_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      POSTHOG_PLAN_API_KEY: ${{ secrets.POSTHOG_PLAN_API_KEY }}
+    permissions:
+      contents: read
+      id-token: write
+
   # The only job that may write to the pull request. It runs even when a plan
   # failed, so a red stack is named in the comment instead of silently absent.
   plan-comment:
     name: Plan comment
-    needs: [gcp-stg, gcp-prd, cloudflare-org, cloudflare-stg, cloudflare-prd]
+    needs: [gcp-stg, gcp-prd, cloudflare-org, cloudflare-stg, cloudflare-prd, posthog-org]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -165,10 +180,11 @@ jobs:
             const BUDGET = 55000
 
             // Also the authoritative list of stacks, and the order they are
-            // read in: environments first, then the edge.
+            // read in: environments first, then the edge, then the SaaS roots.
             const STACKS = [
               'gcp-stg', 'gcp-prd',
               'cloudflare-org', 'cloudflare-stg', 'cloudflare-prd',
+              'posthog-org',
             ]
             const label = key => {
               const [provider, env] = key.split('-')

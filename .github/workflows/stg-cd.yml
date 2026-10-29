@@ -46,7 +46,6 @@ jobs:
       gh_environment: stg
       root: terraform/live/stg/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      service_account: ${{ vars.CF_APPLY_SA_STG }}
       workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
     secrets:

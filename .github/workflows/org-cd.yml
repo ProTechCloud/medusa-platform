@@ -25,11 +25,28 @@ jobs:
       gh_environment: cloudflare-org
       root: terraform/live/org/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-      service_account: ${{ vars.CF_APPLY_SA_ORG }}
       workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
     secrets:
       CLOUDFLARE_MINT_TOKEN: ${{ secrets.CLOUDFLARE_MINT_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
+
+  posthog:
+    name: apply org posthog
+    uses: ./.github/workflows/_posthog-live-apply.yml
+    with:
+      stack: org
+      # Part of the trust rule, like cloudflare-org: the PostHog state binding
+      # accepts only a job running in this environment.
+      gh_environment: posthog-org
+      root: terraform/live/org/posthog
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+    secrets:
+      POSTHOG_APPLY_API_KEY: ${{ secrets.POSTHOG_APPLY_API_KEY }}
     permissions:
       contents: read
       id-token: write
