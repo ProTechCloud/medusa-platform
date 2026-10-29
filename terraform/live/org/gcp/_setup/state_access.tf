@@ -112,3 +112,110 @@ resource "google_kms_crypto_key_iam_member" "cloudflare_state_key" {
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${each.value}"
 }
+
+# ---------------------------------------------------------------------------
+# Direct access: the GitHub identity itself, with no service account.
+#
+# A root that manages nothing in Google needs a Google identity only to open
+# its state, and a service account in that path holds no other right. So the
+# bucket and the key name the federated principal directly, as Google
+# recommends, and the credential is the short-lived federated token.
+#
+# The grants mirror the service-account ones above, stack by stack. Those stay
+# until every workflow has moved here, so dev keeps applying during the switch.
+# ---------------------------------------------------------------------------
+
+locals {
+  # The same trailing-slash rule as cloudflare_state_prefix.
+  direct_state_stacks = {
+    cloudflare-org = { prefix = local.cloudflare_state_prefix.org, plan = local.cloudflare_plan_entries, apply = local.cloudflare_apply_entries.org }
+    cloudflare-stg = { prefix = local.cloudflare_state_prefix.stg, plan = local.cloudflare_plan_entries, apply = local.cloudflare_apply_entries.stg }
+    cloudflare-prd = { prefix = local.cloudflare_state_prefix.prd, plan = local.cloudflare_plan_entries, apply = local.cloudflare_apply_entries.prd }
+    posthog-org    = { prefix = "org/posthog/live/", plan = local.posthog_plan_entries, apply = local.posthog_apply_entries }
+  }
+
+  direct_plan = merge([
+    for stack, s in local.direct_state_stacks : {
+      for entry in s.plan : "${stack}|${entry}" => {
+        prefix = s.prefix
+        member = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.plan_entry/${entry}"
+      }
+    }
+  ]...)
+
+  direct_apply = merge([
+    for stack, s in local.direct_state_stacks : {
+      for entry in s.apply : "${stack}|${entry}" => {
+        prefix = s.prefix
+        member = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.apply_entry/${entry}"
+      }
+    }
+  ]...)
+
+  # The Cloudflare stacks share one plan workflow, so the same plan principal
+  # appears once per stack. Bindings without a condition are keyed by member,
+  # or two resources would own one binding and the first destroy would remove
+  # it from under the other.
+  direct_members = toset(concat(
+    [for b in values(local.direct_plan) : b.member],
+    [for b in values(local.direct_apply) : b.member],
+  ))
+}
+
+resource "google_storage_bucket_iam_member" "direct_apply_state" {
+  for_each = local.direct_apply
+
+  bucket = module.management_state.name
+  role   = "roles/storage.objectAdmin"
+  member = each.value.member
+
+  condition {
+    title       = "only this stack's state"
+    description = "Objects under ${each.value.prefix} and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${module.management_state.name}/objects/${each.value.prefix}')"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "direct_plan_reads_state" {
+  for_each = local.direct_plan
+
+  bucket = module.management_state.name
+  role   = "roles/storage.objectViewer"
+  member = each.value.member
+
+  condition {
+    title       = "only this stack's state"
+    description = "Read objects under ${each.value.prefix}."
+    expression  = "resource.name.startsWith('projects/_/buckets/${module.management_state.name}/objects/${each.value.prefix}')"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "direct_plan_writes_lock" {
+  for_each = local.direct_plan
+
+  bucket = module.management_state.name
+  role   = "roles/storage.objectAdmin"
+  member = each.value.member
+
+  condition {
+    title       = "this stack's lock only"
+    description = "The .tflock object under ${each.value.prefix}, and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${module.management_state.name}/objects/${each.value.prefix}') && resource.name.endsWith('.tflock')"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "direct_state_list" {
+  for_each = local.direct_members
+
+  bucket = module.management_state.name
+  role   = "roles/storage.legacyBucketReader"
+  member = each.value
+}
+
+resource "google_kms_crypto_key_iam_member" "direct_state_key" {
+  for_each = local.direct_members
+
+  crypto_key_id = module.management_state.kms_key_id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = each.value
+}
