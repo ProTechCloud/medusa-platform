@@ -284,7 +284,7 @@ The tunnel token is the exception — `stg-cd` writes it automatically after eac
 
 ### 6. PostHog
 
-PostHog has no API to create an organization or invite a person, so three things happen
+PostHog has no API to create an organization or invite a person, so four things happen
 once, by hand, before `org/posthog` can run:
 
 1. **Sign up** at [PostHog Cloud US](https://us.posthog.com/signup) and name the
@@ -302,9 +302,20 @@ once, by hand, before `org/posthog` can run:
    | apply → `POSTHOG_APPLY_API_KEY` | the four above, plus `organization_member:write`, `project:write` |
 
    Store them from a terminal of your own (`gh secret set …`), never pasted anywhere else.
+4. **Create the empty state** as the bootstrap admin, after `source .envrc.local`:
 
-**PostHog API keys are personal.** Both keys belong to **Fabiana Lula
-(fabiana.lula1@gmail.com)**, who signed up and owns the organization. Unlike the
+   ```sh
+   cd terraform/live/org/posthog
+   terraform init -backend-config="bucket=<management state bucket>"
+   ```
+
+   The first run of a new root writes an empty state object. The plan identity can read
+   this prefix and write only its lock, so a first plan from CI is refused with
+   `storage.objects.create` denied. That refusal is the design; the bootstrap admin
+   creates the object once.
+
+**PostHog API keys are personal.** Both keys belong to **Fabiana Lula**, the organization's
+owner, who signed up. Unlike the
 Cloudflare tokens they cannot be owned by the organization: if that account leaves or loses
 access, both keys stop working, and new ones must be made by another owner and swapped in.
 

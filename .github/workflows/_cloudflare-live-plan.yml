@@ -43,6 +43,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The workflow file counts as the stack: a change to how the plan runs
+      # should be proven by a plan.
       - name: Does this PR touch the stack?
         id: scope
         shell: bash
@@ -54,7 +56,7 @@ jobs:
           changed=$(git diff --name-only \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}")
-          if echo "$changed" | grep -qE "^(${{ inputs.root }}/|terraform/modules/cloudflare/)"; then
+          if echo "$changed" | grep -qE "^(${{ inputs.root }}/|terraform/modules/cloudflare/|\.github/workflows/_cloudflare-live-plan\.yml$)"; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
