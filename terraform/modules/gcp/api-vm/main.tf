@@ -18,7 +18,9 @@ locals {
 # Changing `metadata` updates the instance in place, and cloud-init only reads
 # user-data at boot, so a new cloud-init would sit unused until a reboot
 # nobody schedules. Tying replacement to its content makes the box immutable,
-# as the comment on the instance says.
+# as the comment on the instance says. Only a change to this resource
+# triggers it, not its creation: the apply that adds it to an existing
+# instance updates the metadata in place, and a reset of the VM applies it.
 resource "terraform_data" "cloud_init" {
   input = local.cloud_init
 }
