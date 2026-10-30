@@ -54,6 +54,31 @@ write_files:
       /usr/bin/docker-credential-gcr configure-docker \
         --registries="${region}-docker.pkg.dev"
 
+  # Keeps containers away from the metadata server, where any caller gets the
+  # instance's access token, and through it the tunnel token in Secret
+  # Manager. A container's traffic to it is forwarded, so it passes through
+  # DOCKER-USER; the host's own calls (fetch-token.sh, docker-login.sh) go out
+  # through OUTPUT and are untouched. DNS on port 53 stays open, because the
+  # metadata server is also the resolver containers inherit from the host.
+  #
+  # The rules live in a chain of their own, flushed and rebuilt on every run,
+  # so running this again after a partial failure cannot leave them out of
+  # order. medusa-app.service runs it before every start, after docker has
+  # created DOCKER-USER.
+  - path: /etc/medusa/block-metadata.sh
+    permissions: "0700"
+    owner: root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      iptables -N MEDUSA-METADATA 2>/dev/null || true
+      iptables -F MEDUSA-METADATA
+      iptables -A MEDUSA-METADATA -p udp --dport 53 -j RETURN
+      iptables -A MEDUSA-METADATA -p tcp --dport 53 -j RETURN
+      iptables -A MEDUSA-METADATA -j REJECT
+      iptables -C DOCKER-USER -d 169.254.169.254 -j MEDUSA-METADATA 2>/dev/null \
+        || iptables -I DOCKER-USER -d 169.254.169.254 -j MEDUSA-METADATA
+
   # Invoked by CI over IAP with the fully-qualified image ref to roll out.
   - path: /etc/medusa/deploy.sh
     permissions: "0755"
@@ -106,9 +131,14 @@ write_files:
       RestartSec=5
       Environment=HOME=/var/lib/medusa
       Environment=DOCKER_CONFIG=/var/lib/medusa/.docker
+      ExecStartPre=/etc/medusa/block-metadata.sh
       ExecStartPre=/etc/medusa/docker-login.sh
+      # On the default bridge, not the host network, so block-metadata.sh can
+      # filter what the app reaches. The port is published on the loopback
+      # only: cloudflared and the deploy check reach it at 127.0.0.1, and
+      # nothing outside the box can.
       ExecStart=/bin/bash -c '/usr/bin/docker run --rm --name medusa-app \
-        --network host \
+        -p 127.0.0.1:${app_port}:${app_port} \
         -e PORT=${app_port} \
         -e APP_ENV=${environment} \
         --log-driver=gcplogs \
@@ -144,7 +174,7 @@ write_files:
         exec /usr/bin/docker run --rm --name cloudflared \
         --network host \
         --log-driver=gcplogs \
-        cloudflare/cloudflared:latest tunnel --no-autoupdate run \
+        ${cloudflared_image} tunnel --no-autoupdate run \
         --token "$TOKEN"'
       ExecStop=/usr/bin/docker stop cloudflared
       ExecStopPost=-/usr/bin/docker rm -f cloudflared

@@ -27,7 +27,18 @@ variable "subnet_cidr" {
 
 variable "app_port" {
   type        = number
-  description = "Loopback port the application listens on. Never published; the connector reaches it from inside the box."
+  description = "Port the application listens on. Published on the loopback only; the connector reaches it from inside the box."
+}
+
+variable "cloudflared_image" {
+  type        = string
+  default     = "cloudflare/cloudflared:2026.10.4@sha256:c6c7ae1d5dfdcb094ad344ed68ccffc26635c9c6be80965664c33baf064b0515"
+  description = "Connector image, as tag@digest. The connector holds the tunnel token, so it runs only an image whose content is pinned: a tag alone can be moved upstream and would run at the next restart."
+
+  validation {
+    condition     = can(regex("^[^@]+:[^@:]+@sha256:[0-9a-f]{64}$", var.cloudflared_image))
+    error_message = "cloudflared_image must be pinned as <image>:<tag>@sha256:<digest>."
+  }
 }
 
 variable "tunnel_token_secret_id" {

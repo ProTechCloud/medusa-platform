@@ -5,13 +5,22 @@ data "google_compute_image" "cos" {
 
 locals {
   cloud_init = templatefile("${path.module}/templates/cloud-init.yaml", {
-    project_id      = var.project_id
-    secret_id       = var.tunnel_token_secret_id
-    region          = var.region
-    app_port        = var.app_port
-    environment     = var.environment
-    bootstrap_image = var.bootstrap_image
+    project_id        = var.project_id
+    secret_id         = var.tunnel_token_secret_id
+    region            = var.region
+    app_port          = var.app_port
+    environment       = var.environment
+    bootstrap_image   = var.bootstrap_image
+    cloudflared_image = var.cloudflared_image
   })
+}
+
+# Changing `metadata` updates the instance in place, and cloud-init only reads
+# user-data at boot, so a new cloud-init would sit unused until a reboot
+# nobody schedules. Tying replacement to its content makes the box immutable,
+# as the comment on the instance says.
+resource "terraform_data" "cloud_init" {
+  input = local.cloud_init
 }
 
 resource "google_compute_instance" "api" {
@@ -71,8 +80,13 @@ resource "google_compute_instance" "api" {
     preemptible         = false
   }
 
-  # The box is immutable: a cloud-init change replaces it, and CI redeploys
-  # the image straight after.
+  # The box is immutable: a cloud-init change replaces it. The new box boots
+  # the bootstrap image, so run deploy-stg in the application repository
+  # right after the apply to put the current image back.
+  lifecycle {
+    replace_triggered_by = [terraform_data.cloud_init]
+  }
+
   depends_on = [
     google_secret_manager_secret_iam_member.reads_tunnel_token,
     google_artifact_registry_repository_iam_member.pulls_images,
