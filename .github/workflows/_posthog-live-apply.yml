@@ -89,3 +89,31 @@ jobs:
           TF_VAR_organization_id: ${{ vars.POSTHOG_ORGANIZATION_ID }}
           TF_VAR_administrator_email: ${{ vars.POSTHOG_ADMINISTRATOR_EMAIL }}
         run: terraform apply -auto-approve -input=false -lock-timeout=5m -no-color
+
+      # The project token SDKs send with, into stg's secret, where the VM reads
+      # it at boot. Same identity as the state access above: the stg secret
+      # grants this apply entry secretVersionAdder and nothing else
+      # (stg/gcp/main.tf), so no service account is impersonated.
+      - name: Write the project token to stg's secret
+        working-directory: ${{ inputs.root }}
+        shell: bash
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_STG }}
+          SECRET: medusa_stg_posthog_posthog-project-token
+        run: |
+          set -euo pipefail
+          value=$(terraform output -raw project_api_token)
+
+          # An empty output would become the latest version, and the VM reads
+          # versions/latest at boot.
+          if [ -z "$value" ]; then
+            echo "::error::terraform output project_api_token is empty. The secret was left untouched."
+            exit 1
+          fi
+          echo "::add-mask::$value"
+
+          # Through stdin, never an argument: arguments show up in process
+          # listings and in gcloud's own command log.
+          printf '%s' "$value" | gcloud secrets versions add "$SECRET" \
+            --project="$PROJECT" \
+            --data-file=-

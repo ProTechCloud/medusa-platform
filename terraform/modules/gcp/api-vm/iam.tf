@@ -1,11 +1,18 @@
 # The identity the box runs as is created by the environment's _setup root and
 # passed in, so the apply identity never needs permission to create a service
-# account. What is granted here is only what the instance may reach: one
-# secret, one registry, and its own logs.
+# account. What is granted here is only what the instance may reach: two
+# secrets, one registry, and its own logs.
 
 resource "google_secret_manager_secret_iam_member" "reads_tunnel_token" {
   project   = var.project_id
   secret_id = var.tunnel_token_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.service_account_email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "reads_posthog_project_token" {
+  project   = var.project_id
+  secret_id = var.posthog_token_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${var.service_account_email}"
 }

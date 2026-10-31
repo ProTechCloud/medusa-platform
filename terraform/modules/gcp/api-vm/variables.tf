@@ -46,6 +46,11 @@ variable "tunnel_token_secret_id" {
   description = "Short id of the Secret Manager secret holding the tunnel token. The instance reads it at boot with its own identity, so the value is never in metadata and never in state."
 }
 
+variable "posthog_token_secret_id" {
+  type        = string
+  description = "Short id of the Secret Manager secret holding the PostHog project token. Read at boot like the tunnel token, so the value is never in metadata and never in state."
+}
+
 variable "artifact_registry_name" { type = string }
 variable "artifact_registry_location" { type = string }
 

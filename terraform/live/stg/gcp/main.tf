@@ -33,6 +33,29 @@ resource "google_secret_manager_secret_iam_member" "writer_adds_versions" {
   member    = "serviceAccount:${local.setup.tunnel_token_writer}"
 }
 
+# The container only, like the tunnel token. The PostHog apply reads the
+# project token from its own state and writes it here as a new version, so the
+# value never reaches this state file.
+module "posthog_project_token" {
+  source = "../../../modules/gcp/secret"
+
+  project_id  = var.project_id
+  environment = var.environment
+  domain      = "posthog"
+  name        = "posthog-project-token"
+  location    = var.region
+  kms_key     = local.setup.secrets_key
+  labels      = merge(local.labels, { component = "secret" })
+}
+
+# Add a version and nothing else: the PostHog apply cannot read one back.
+resource "google_secret_manager_secret_iam_member" "posthog_writer_adds_versions" {
+  project   = var.project_id
+  secret_id = module.posthog_project_token.secret_id
+  role      = "roles/secretmanager.secretVersionAdder"
+  member    = local.setup.posthog_token_writer
+}
+
 module "api" {
   source = "../../../modules/gcp/api-vm"
 
@@ -46,6 +69,7 @@ module "api" {
 
   service_account_email      = local.setup.instance_service_account
   tunnel_token_secret_id     = module.tunnel_token.secret_id
+  posthog_token_secret_id    = module.posthog_project_token.secret_id
   artifact_registry_name     = module.registry.name
   artifact_registry_location = module.registry.location
 }

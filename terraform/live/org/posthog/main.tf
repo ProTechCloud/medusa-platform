@@ -15,6 +15,15 @@ resource "posthog_project" "medusa" {
   timezone = "UTC"
 }
 
+# Session replay on for every SDK that sends to this project, and client IPs
+# discarded at ingestion (Discard client IP data in PostHog), so no event
+# stores where a member was.
+resource "posthog_project_settings" "medusa" {
+  project_id               = posthog_project.medusa.id
+  session_recording_opt_in = true
+  anonymize_ips            = true
+}
+
 data "posthog_user" "administrator" {
   email = var.administrator_email
 }

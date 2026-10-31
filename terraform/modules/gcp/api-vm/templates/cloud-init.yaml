@@ -41,6 +41,39 @@ write_files:
 
       printf '%s' "$TOKEN"
 
+  # The app's environment, in a file docker passes to the container with
+  # --env-file. The PostHog project token is resolved from Secret Manager the
+  # same way as the tunnel token, with the instance's own identity, so it never
+  # appears in instance metadata; the rest are fixed values. medusa-app.service
+  # runs this before every start, so a restart picks up a new token version.
+  - path: /etc/medusa/write-app-env.sh
+    permissions: "0700"
+    owner: root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      ACCESS_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+        | /usr/bin/python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+      [ -n "$ACCESS_TOKEN" ] || { echo "no access token from metadata server" >&2; exit 1; }
+
+      TOKEN=$(curl -sf -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${posthog_secret_id}/versions/latest:access" \
+        | /usr/bin/python3 -c 'import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode(), end="")')
+      [ -n "$TOKEN" ] || { echo "empty PostHog project token from Secret Manager" >&2; exit 1; }
+
+      # Readable by root alone: the file holds the token.
+      umask 077
+      mkdir -p /var/lib/medusa
+      cat > /var/lib/medusa/app.env <<EOF
+      POSTHOG_PROJECT_TOKEN=$TOKEN
+      POSTHOG_HOST=https://us.i.posthog.com
+      LOG_POSTHOG_LEVEL=warn
+      OTEL_TRACES_SAMPLER_ARG=1
+      NODE_ENV=production
+      EOF
+
   # docker-credential-gcr writes to $HOME/.docker, and /root is read-only on
   # COS, so HOME is redirected to the writable data directory.
   - path: /etc/medusa/docker-login.sh
@@ -133,6 +166,7 @@ write_files:
       Environment=DOCKER_CONFIG=/var/lib/medusa/.docker
       ExecStartPre=/etc/medusa/block-metadata.sh
       ExecStartPre=/etc/medusa/docker-login.sh
+      ExecStartPre=/etc/medusa/write-app-env.sh
       # On the default bridge, not the host network, so block-metadata.sh can
       # filter what the app reaches. The port is published on the loopback
       # only: cloudflared and the deploy check reach it at 127.0.0.1, and
@@ -141,6 +175,7 @@ write_files:
         -p 127.0.0.1:${app_port}:${app_port} \
         -e PORT=${app_port} \
         -e APP_ENV=${environment} \
+        --env-file /var/lib/medusa/app.env \
         --log-driver=gcplogs \
         "$(cat /var/lib/medusa/current-image)"'
       ExecStop=/usr/bin/docker stop medusa-app
