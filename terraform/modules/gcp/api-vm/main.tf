@@ -5,14 +5,15 @@ data "google_compute_image" "cos" {
 
 locals {
   cloud_init = templatefile("${path.module}/templates/cloud-init.yaml", {
-    project_id        = var.project_id
-    secret_id         = var.tunnel_token_secret_id
-    posthog_secret_id = var.posthog_token_secret_id
-    region            = var.region
-    app_port          = var.app_port
-    environment       = var.environment
-    bootstrap_image   = var.bootstrap_image
-    cloudflared_image = var.cloudflared_image
+    project_id              = var.project_id
+    secret_id               = var.tunnel_token_secret_id
+    posthog_secret_id       = var.posthog_token_secret_id
+    otel_traces_sampler_arg = var.otel_traces_sampler_arg
+    region                  = var.region
+    app_port                = var.app_port
+    environment             = var.environment
+    bootstrap_image         = var.bootstrap_image
+    cloudflared_image       = var.cloudflared_image
   })
 }
 

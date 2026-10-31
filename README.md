@@ -343,25 +343,31 @@ written under an identity that can add a version to that one secret and cannot r
 back. The PostHog project token takes the same path: `_posthog-live-apply.yml` reads it from
 the `org/posthog` state after the apply and adds it as a version of stg's
 `medusa_stg_posthog_posthog-project-token`, as the federated identity of that apply, which
-holds `secretVersionAdder` on that one secret. The only value the GCP roots write into
+holds `secretVersionAdder` on that one secret. `stg-cd` creates the secret on the same push,
+so the step retries the write every 20 seconds for up to ten minutes until it exists. The only value the GCP roots write into
 state is the literal string `REPLACE_ME_VIA_SECRET_MANAGER`.
 
-**What the VM reads at boot.** `cloudflared.service` fetches the tunnel token, and
-`medusa-app.service` runs `/etc/medusa/write-app-env.sh` before every start: it reads the
-PostHog project token and writes `/var/lib/medusa/app.env`, readable by root alone, which
-the container gets with `--env-file`:
+**What the VM reads before the app starts.** `cloudflared.service` fetches the tunnel token,
+and `medusa-app.service` runs `/etc/medusa/write-app-env.sh` before every start. It writes
+`/var/lib/medusa/app.env`, readable by root alone, which the container gets with
+`--env-file`:
 
 | Variable | Value |
 |---|---|
-| `POSTHOG_PROJECT_TOKEN` | the latest version of `medusa_<env>_posthog_posthog-project-token` |
 | `POSTHOG_HOST` | `https://us.i.posthog.com` |
 | `LOG_POSTHOG_LEVEL` | `warn` |
-| `OTEL_TRACES_SAMPLER_ARG` | `1` |
+| `LOG_STDOUT` | `true` |
+| `LOG_LEVEL` | `info` |
+| `OTEL_TRACES_SAMPLER_ARG` | `1` in stg, `0.1` in prd (`otel_traces_sampler_arg` in each `<env>/gcp`) |
 | `NODE_ENV` | `production` |
+| `POSTHOG_PROJECT_TOKEN` | the latest version of `medusa_<env>_posthog_posthog-project-token`, only when it is real |
 
+The token is optional: without it the API sends nothing to PostHog and runs the same. So
+the script never stops the start. It writes the fixed values, then adds the token only when
+Secret Manager answered within ten seconds with a value that is neither empty nor
+`REPLACE_ME_VIA_SECRET_MANAGER`; otherwise it logs one line saying the token is absent.
 Because the file is rewritten before every start, a restart picks up a new token version;
-`deploy-stg` in `medusa-app` restarts the app. If the token cannot be read, the app does
-not start.
+`deploy-stg` in `medusa-app` restarts the app.
 
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
@@ -404,7 +410,7 @@ not a code change and not a deploy.
 
 **No role grants an IAP tunnel or OS Login.** That is deliberate rather than missing: a
 shell on the box is the box's identity, and the box reads the tunnel-token and PostHog
-token secrets because it needs them at boot. Any human shell would therefore reach a secret
+token secrets because it needs them to start. Any human shell would therefore reach a secret
 value, whatever the deny policy says, because the caller on that path is the VM and not the
 person.
 

@@ -42,37 +42,57 @@ write_files:
       printf '%s' "$TOKEN"
 
   # The app's environment, in a file docker passes to the container with
-  # --env-file. The PostHog project token is resolved from Secret Manager the
-  # same way as the tunnel token, with the instance's own identity, so it never
-  # appears in instance metadata; the rest are fixed values. medusa-app.service
-  # runs this before every start, so a restart picks up a new token version.
+  # --env-file. medusa-app.service runs this before every start, so a restart
+  # picks up a new token version.
+  #
+  # The PostHog project token is optional: without it the API sends nothing
+  # and runs the same. So this script never fails the start. The fixed values
+  # go in first; the token is added only when Secret Manager answered, in time,
+  # with a real value. An unreachable API, an empty value or the placeholder
+  # the secret is created with all leave it out, with one line in the journal.
+  # It is read with the instance's own identity, as fetch-token.sh reads the
+  # tunnel token, so it never appears in instance metadata.
   - path: /etc/medusa/write-app-env.sh
     permissions: "0700"
     owner: root
     content: |
       #!/bin/bash
-      set -euo pipefail
+      set -uo pipefail
 
-      ACCESS_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
-        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
-        | /usr/bin/python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-      [ -n "$ACCESS_TOKEN" ] || { echo "no access token from metadata server" >&2; exit 1; }
-
-      TOKEN=$(curl -sf -H "Authorization: Bearer $ACCESS_TOKEN" \
-        "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${posthog_secret_id}/versions/latest:access" \
-        | /usr/bin/python3 -c 'import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode(), end="")')
-      [ -n "$TOKEN" ] || { echo "empty PostHog project token from Secret Manager" >&2; exit 1; }
-
-      # Readable by root alone: the file holds the token.
+      # Readable by root alone: the file holds the token. Written beside the
+      # target and moved into place, so the app never reads half a file.
       umask 077
       mkdir -p /var/lib/medusa
-      cat > /var/lib/medusa/app.env <<EOF
-      POSTHOG_PROJECT_TOKEN=$TOKEN
+      TMP=$(mktemp /var/lib/medusa/app.env.XXXXXX)
+      cat > "$TMP" <<EOF
       POSTHOG_HOST=https://us.i.posthog.com
       LOG_POSTHOG_LEVEL=warn
-      OTEL_TRACES_SAMPLER_ARG=1
+      LOG_STDOUT=true
+      LOG_LEVEL=info
+      OTEL_TRACES_SAMPLER_ARG=${otel_traces_sampler_arg}
       NODE_ENV=production
       EOF
+
+      # --max-time on both calls: a Secret Manager that does not answer must
+      # not hold the start.
+      TOKEN=$(
+        ACCESS_TOKEN=$(curl -sf --max-time 10 -H "Metadata-Flavor: Google" \
+          "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+          | /usr/bin/python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])' 2>/dev/null) &&
+        [ -n "$ACCESS_TOKEN" ] &&
+        curl -sf --max-time 10 -H "Authorization: Bearer $ACCESS_TOKEN" \
+          "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${posthog_secret_id}/versions/latest:access" \
+          | /usr/bin/python3 -c 'import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode(), end="")' 2>/dev/null
+      ) || TOKEN=""
+
+      if [ -n "$TOKEN" ] && [ "$TOKEN" != "REPLACE_ME_VIA_SECRET_MANAGER" ]; then
+        printf 'POSTHOG_PROJECT_TOKEN=%s\n' "$TOKEN" >> "$TMP"
+      else
+        echo "write-app-env: PostHog project token absent; the API starts without it and sends nothing" >&2
+      fi
+
+      mv "$TMP" /var/lib/medusa/app.env
+      exit 0
 
   # docker-credential-gcr writes to $HOME/.docker, and /root is read-only on
   # COS, so HOME is redirected to the writable data directory.
