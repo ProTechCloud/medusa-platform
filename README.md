@@ -280,12 +280,14 @@ to the shell history, where it outlives the terminal and is readable by anything
 that can read the bootstrap account's home directory. `--data-file=-` with no
 pipe reads from the terminal instead.
 
-The tunnel token is the exception — `stg-cd` writes it automatically after each apply.
+Two are the exception: `stg-cd` writes the tunnel token after each apply, and `org-cd`
+writes the PostHog project token to `medusa_stg_posthog_posthog-project-token` after each
+PostHog apply.
 
 ### 6. PostHog
 
-PostHog has no API to create an organization or invite a person, so four things happen
-once, by hand, before `org/posthog` can run:
+PostHog has no API to create an organization, invite a person or create a key, so five
+things happen once, by hand — the first four before `org/posthog` can run:
 
 1. **Sign up** at [PostHog Cloud US](https://us.posthog.com/signup) and name the
    organization `medusa`. Leave the project sign-up creates: `org/posthog` imports it and
@@ -314,10 +316,20 @@ once, by hand, before `org/posthog` can run:
    `storage.objects.create` denied. That refusal is the design; the bootstrap admin
    creates the object once.
 
-**PostHog API keys are personal.** Both keys belong to **Fabiana Lula**, the organization's
+5. **Create the source-map key** for the app, under Account settings → Personal API keys:
+   scopes `error_tracking:write` and `organization:read`, limited to the `medusa`
+   organization, labelled `medusa source maps`. Terraform cannot create a personal key.
+   It lives only in `apps/native/.env.dev` in `medusa-app`, on the Mac where the app is
+   built, as `POSTHOG_CLI_API_KEY`, with the project ID as `POSTHOG_CLI_PROJECT_ID`. No
+   GitHub secret holds it: the app has no build pipeline yet.
+
+`org/posthog` also sets the project's settings: session replay on
+(`session_recording_opt_in`) and client IPs discarded at ingestion (`anonymize_ips`).
+
+**PostHog API keys are personal.** The three keys belong to **Fabiana Lula**, the organization's
 owner, who signed up. Unlike the
 Cloudflare tokens they cannot be owned by the organization: if that account leaves or loses
-access, both keys stop working, and new ones must be made by another owner and swapped in.
+access, the keys stop working, and new ones must be made by another owner and swapped in.
 
 **One project serves every environment.** `stg` and `prd` are not separate projects: the
 environment travels on the data — `deployment.environment.name` on traces, `environment` on
@@ -328,8 +340,34 @@ log lines — and is a filter in PostHog, not a second project to keep in step.
 **No secret value reaches a GCP state file.** Terraform creates secret containers, never
 their contents; the tunnel token is fetched from the Cloudflare API by the deploy job and
 written under an identity that can add a version to that one secret and cannot read it
-back. The only value the GCP roots write into state is the literal string
-`REPLACE_ME_VIA_SECRET_MANAGER`.
+back. The PostHog project token takes the same path: `_posthog-live-apply.yml` reads it from
+the `org/posthog` state after the apply and adds it as a version of stg's
+`medusa_stg_posthog_posthog-project-token`, as the federated identity of that apply, which
+holds `secretVersionAdder` on that one secret. `stg-cd` creates the secret on the same push,
+so the step retries the write every 20 seconds for up to ten minutes until it exists. The only value the GCP roots write into
+state is the literal string `REPLACE_ME_VIA_SECRET_MANAGER`.
+
+**What the VM reads before the app starts.** `cloudflared.service` fetches the tunnel token,
+and `medusa-app.service` runs `/etc/medusa/write-app-env.sh` before every start. It writes
+`/var/lib/medusa/app.env`, readable by root alone, which the container gets with
+`--env-file`:
+
+| Variable | Value |
+|---|---|
+| `POSTHOG_HOST` | `https://us.i.posthog.com` |
+| `LOG_POSTHOG_LEVEL` | `warn` |
+| `LOG_STDOUT` | `true` |
+| `LOG_LEVEL` | `info` |
+| `OTEL_TRACES_SAMPLER_ARG` | `1` in stg, `0.1` in prd (`otel_traces_sampler_arg` in each `<env>/gcp`) |
+| `NODE_ENV` | `production` |
+| `POSTHOG_PROJECT_TOKEN` | the latest version of `medusa_<env>_posthog_posthog-project-token`, only when it is real |
+
+The token is optional: without it the API sends nothing to PostHog and runs the same. So
+the script never stops the start. It writes the fixed values, then adds the token only when
+Secret Manager answered within ten seconds with a value that is neither empty nor
+`REPLACE_ME_VIA_SECRET_MANAGER`; otherwise it logs one line saying the token is absent.
+Because the file is rewritten before every start, a restart picks up a new token version;
+`deploy-stg` in `medusa-app` restarts the app.
 
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
@@ -371,9 +409,10 @@ refused. Membership is managed in the Google Group, so adding or removing a deve
 not a code change and not a deploy.
 
 **No role grants an IAP tunnel or OS Login.** That is deliberate rather than missing: a
-shell on the box is the box's identity, and the box reads the tunnel-token secret because
-it needs it at boot. Any human shell would therefore reach a secret value, whatever the
-deny policy says, because the caller on that path is the VM and not the person.
+shell on the box is the box's identity, and the box reads the tunnel-token and PostHog
+token secrets because it needs them to start. Any human shell would therefore reach a secret
+value, whatever the deny policy says, because the caller on that path is the VM and not the
+person.
 
 The administration role is one account and not a group, so every change made outside CI
 has exactly one owner. It sits outside the deny policy — it is the role for the cases
@@ -386,7 +425,7 @@ nobody listed in advance.
 | `live-plan` | every PR | plans all six stacks; `Plan stg` and `Plan prd` always report, the Cloudflare and PostHog stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks, trivy → **Code Quality Summary** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
-| `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog |
+| `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `{gcp,cloudflare}-prd-live-apply` | every push | **switched off** — shows as skipped |
 
 Branch protection requires `Plan stg / plan`, `Plan prd / plan` and `Code Quality Summary`.

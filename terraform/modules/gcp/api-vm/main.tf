@@ -5,13 +5,15 @@ data "google_compute_image" "cos" {
 
 locals {
   cloud_init = templatefile("${path.module}/templates/cloud-init.yaml", {
-    project_id        = var.project_id
-    secret_id         = var.tunnel_token_secret_id
-    region            = var.region
-    app_port          = var.app_port
-    environment       = var.environment
-    bootstrap_image   = var.bootstrap_image
-    cloudflared_image = var.cloudflared_image
+    project_id              = var.project_id
+    secret_id               = var.tunnel_token_secret_id
+    posthog_secret_id       = var.posthog_token_secret_id
+    otel_traces_sampler_arg = var.otel_traces_sampler_arg
+    region                  = var.region
+    app_port                = var.app_port
+    environment             = var.environment
+    bootstrap_image         = var.bootstrap_image
+    cloudflared_image       = var.cloudflared_image
   })
 }
 
@@ -91,6 +93,7 @@ resource "google_compute_instance" "api" {
 
   depends_on = [
     google_secret_manager_secret_iam_member.reads_tunnel_token,
+    google_secret_manager_secret_iam_member.reads_posthog_project_token,
     google_artifact_registry_repository_iam_member.pulls_images,
   ]
 }

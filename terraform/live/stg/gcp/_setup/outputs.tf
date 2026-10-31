@@ -25,6 +25,11 @@ output "tunnel_token_writer" {
   value       = module.tunnel_token_writer.email
 }
 
+output "posthog_token_writer" {
+  description = "Identity the PostHog apply uses to write the project token, passed through from org/gcp/_setup: the workload root reads only this root's outputs."
+  value       = local.org.posthog_token_writer
+}
+
 output "deploy_spoke" {
   description = "Identity medusa-app deploys as. Empty outside stg."
   value       = one(module.deploy_spoke[*].email)

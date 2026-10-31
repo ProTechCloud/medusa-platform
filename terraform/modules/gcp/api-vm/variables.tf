@@ -46,6 +46,16 @@ variable "tunnel_token_secret_id" {
   description = "Short id of the Secret Manager secret holding the tunnel token. The instance reads it at boot with its own identity, so the value is never in metadata and never in state."
 }
 
+variable "posthog_token_secret_id" {
+  type        = string
+  description = "Short id of the Secret Manager secret holding the PostHog project token. Read before every start of the app, like the tunnel token, so the value is never in metadata and never in state. Optional at runtime: the app starts without it."
+}
+
+variable "otel_traces_sampler_arg" {
+  type        = string
+  description = "Share of the API's traces kept, from 0 to 1, written to the app's environment as OTEL_TRACES_SAMPLER_ARG."
+}
+
 variable "artifact_registry_name" { type = string }
 variable "artifact_registry_location" { type = string }
 

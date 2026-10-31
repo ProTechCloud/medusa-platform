@@ -56,6 +56,11 @@ output "tunnel_token_hubs" {
   value       = { for k, m in module.tunnel_token_hub : k => m.email }
 }
 
+output "posthog_token_writer" {
+  description = "The federated identity that runs _posthog-live-apply.yml, which writes the PostHog project token to each environment's secret after the apply. No service account stands in between, as for its state access."
+  value       = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.apply_entry/${one(local.posthog_apply_entries)}"
+}
+
 output "backend_deploy_hub" {
   value = module.backend_deploy_hub.email
 }
