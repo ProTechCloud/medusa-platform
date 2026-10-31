@@ -57,7 +57,10 @@ write_files:
     owner: root
     content: |
       #!/bin/bash
-      set -uo pipefail
+      # Errors stop the start: a file that cannot be written must not leave the
+      # app on an old or partial one. Only reading the token may fail, and
+      # that is handled where it is read.
+      set -euo pipefail
 
       # Readable by root alone: the file holds the token. Written beside the
       # target and moved into place, so the app never reads half a file.
