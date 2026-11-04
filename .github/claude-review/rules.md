@@ -5,7 +5,11 @@ from the base branch so a pull request cannot change its own review.
 
 **Every finding is required.** Nothing this review raises is optional: each one blocks the merge
 until it is fixed, or until a reply disputes it and the checker accepts the reply. The check stays
-red while any finding is open, and the `dev` ruleset requires every review thread to be resolved.
+red while any finding is open, the review requests changes, and the `dev` ruleset requires every
+review thread to be resolved.
+
+**What this review posts, and nothing else:** one inline comment per finding, on its line, and one
+verdict review — changes requested or approved. No summary comment, no conversation comment.
 
 ## Run order
 
@@ -43,14 +47,12 @@ red while any finding is open, and the `dev` ruleset requires every review threa
    Never resolve, hide or edit a comment this workflow did not post.
 7. **Publish.** Follow _Publishing_. Then answer with the structured output: `open_findings`, the
    number of findings still open after this run — new ones plus earlier ones still present — and
-   `verdict`.
+   `verdict`, `changes requested` or `approved`.
 
 ## Ground rules
 
 - **Only what this diff changed.** A finding sits on an added or modified line. Old code is out
-  of scope — with one exception: a real bug in the same function as one of your findings may be
-  mentioned once, in the summary, as `pre-existing: path:line — <sentence>`. It is not a finding
-  and does not count as open.
+  of scope.
 - **Defects, not taste.** A finding is a bug, a security, performance or correctness risk, or a
   break of a rule this repo wrote down. Wording, formatting and "might be clearer" are not
   findings, and no convention the repo has not documented may be enforced. Because every finding
@@ -197,50 +199,76 @@ and all blocking.
 Comments use [Conventional Comments](https://conventionalcomments.org). Every finding is an
 `issue (blocking)`, whatever its severity; the severity and the lens stay in the comment.
 
-- **Inline**, per finding not flagged `outside`. Put the flags after the endpoint:
+### Inline comments — one per finding
+
+Every finding is posted on its own line of the pull request, even when another reviewer or bot has
+a thread there; the only finding not posted again is one whose own earlier comment from this
+workflow is still open (step 6). Put the flags after the endpoint:
+
+```
+gh api repos/<REPO>/pulls/<PR>/comments -X POST -f commit_id=<HEAD SHA> \
+  -f path=<file> -F line=<line> -f side=RIGHT -f body=<body>
+```
+
+```
+**issue (blocking, <lens>):** <severity> <problem>
+
+**Fix:** <fix>
+
+<why, when there is one>
+
+<sub>Required before merge: fix it, or reply with why it does not apply. Checker: <result>.</sub>
+<!-- claude-review -->
+```
+
+When another reviewer already flagged the same defect, add ``(also: `@handle`)`` after the
+problem — backticked so it never pings. A finding flagged `outside` goes on the nearest added line
+of the same file, or, when that file has no added line, on the first added line of the pull
+request, and its body starts with the real location: `On <path>:<line>:`. A reply in an existing
+thread goes to `gh api repos/<REPO>/pulls/<PR>/comments/<comment id>/replies -X POST -f body=<body>`
+and ends with `<!-- claude-review -->` too.
+
+### Verdict — one review per run
+
+Posted after the inline comments, on the head commit:
+
+- **Open findings** (`open_findings` > 0):
 
   ```
-  gh api repos/<REPO>/pulls/<PR>/comments -X POST -f commit_id=<HEAD SHA> \
-    -f path=<file> -F line=<line> -f side=RIGHT -f body=<body>
+  gh api repos/<REPO>/pulls/<PR>/reviews -X POST -f commit_id=<HEAD SHA> \
+    -f event=REQUEST_CHANGES -f body=<body>
   ```
 
   ```
-  **issue (blocking, <lens>):** <severity> <problem>
+  ❌ **Changes requested** — <n> open findings.
 
-  **Fix:** <fix>
-
-  <sub>Checker: <result>. Required before merge: fix it, or reply with why it does not apply.</sub>
-  <!-- claude-review -->
+  Every finding is required: each one blocks the merge until it is fixed, or a reply disputes it
+  and the review accepts the reply. Resolve every thread before merging.
+  <!-- claude-review-verdict -->
   ```
 
-  The why goes in the summary only. Skip a finding an open comment within ±3 lines already makes;
-  when that comment came from someone else, add ``(also: `@handle`)`` — backticked so it never
-  pings. A reply in an existing thread goes to
-  `gh api repos/<REPO>/pulls/<PR>/comments/<comment id>/replies -X POST -f body=<body>` and ends
-  with `<!-- claude-review -->` too.
-- **Summary**, one per PR, updated in place. Find it in the context file's conversation comments
-  by its `<!-- claude-review-summary -->` marker and edit it with
-  `gh api repos/<REPO>/issues/comments/<id> -X PATCH -F body=@-`; only when there is none, create
-  it with `gh pr comment <PR> --body-file -`. Never `--edit-last`: other workflows post as the same
-  bot, and it would overwrite their comment.
+  If GitHub refuses `REQUEST_CHANGES` for this token, post the same body with `event=COMMENT`.
+- **No open findings**: first dismiss every earlier `CHANGES_REQUESTED` review this workflow left
+  (the ones carrying `<!-- claude-review-verdict -->`, from the context file's reviews), with
+  `gh api repos/<REPO>/pulls/<PR>/reviews/<id>/dismissals -X PUT -f event=DISMISS -f message=<msg>`
+  and the message `Every finding is resolved at <sha>.` Then post `event=COMMENT` with:
 
   ```
-  ## Claude review — <head sha, 7 chars>
-  **Verdict:** 🚨 <n> open findings, all required | ✅ No open findings
-  Every finding below blocks the merge until it is fixed or a reply is accepted.
-  | Lens | Open |              one row per lens; "clean" when clean
-  ### Open findings            each one as issue (blocking, <lens>), with its link
-  ### Outside the diff         only when any; each also issue (blocking)
-  ### Why                      only when any finding has one
-  ### Pre-existing             only when any; not blocking, not counted
-  ### Rejected by the checker  each dropped finding, its quote and reason
-  ### Cleared since last run   each thread resolved and hidden in step 6
-  <!-- claude-review-summary -->
+  ✅ **Approved** — no open findings.
+
+  Every finding was required, and every one is resolved. A human approval is still needed to merge.
+  <!-- claude-review-verdict -->
   ```
 
-- `open_findings` counts every open finding, the ones `outside` the diff included.
-- Never approve or request changes. In any comment body, never put `'` or `"` between a `{` and
-  its `}`; use backticks there instead.
+  This workflow cannot give a GitHub approval; the ✅ review is its verdict.
+
+### Never
+
+- A summary or conversation comment. If an earlier run left one (it carries
+  `<!-- claude-review-summary -->`), delete it:
+  `gh api repos/<REPO>/issues/comments/<id> -X DELETE`.
+- `APPROVE`, or a verdict that disagrees with `open_findings`.
+- `'` or `"` between a `{` and its `}` in any body; use backticks there instead.
 
 ## Repo rules
 

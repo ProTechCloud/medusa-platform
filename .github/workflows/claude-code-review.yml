@@ -210,14 +210,16 @@ jobs:
             --allowedTools
               "Read,Grep,Glob,Task"
               "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
-              "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
+              "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
               "Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/comments:*)"
+              "Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/reviews:*)"
               "Bash(gh api repos/${{ github.repository }}/pulls/comments/:*)"
               "Bash(gh api repos/${{ github.repository }}/issues/comments/:*)"
               "Bash(gh api graphql:*)"
 
-      # Every finding is required: the check stays red while any is open.
-      # The dev ruleset also requires every review thread to be resolved.
+      # Every finding is required: the check stays red while any is open, the
+      # review requests changes, and the dev ruleset requires every review
+      # thread to be resolved.
       - name: Require every finding to be resolved
         shell: bash
         env:
