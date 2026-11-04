@@ -1,18 +1,23 @@
-"""Publishes the Claude review from its structured output.
+"""Reconciles the Claude review with the pull request, and publishes the result.
 
-Run by .github/workflows/claude-code-review.yml, taken from the base branch like the rules.
-Every write to the pull request happens here, so each run leaves the same shape behind:
+Run by .github/workflows/claude-code-review.yml, taken from the base branch like the rules. The
+review is blind: it returns every finding present at the head commit, knowing nothing of earlier
+comments. This script alone compares that list with the threads this workflow already has:
 
-- at most one new review per run, holding every new inline comment and the verdict;
-- no finding posted twice: an open thread from this workflow within 3 lines is the same one;
-- a finding on a line the diff does not carry moves to the nearest line it does;
-- only this workflow's own comments and threads are replied to, resolved or reopened;
-- one live verdict: an unchanged request for changes is edited in place, and every older
-  verdict is dismissed and collapsed when a new one is posted;
-- the verdict follows the threads, not the model: changes are requested while any thread
-  from this workflow is unresolved.
+- a finding that matches an open thread stays as it is, never posted twice;
+- a finding that matches a thread this workflow resolved is back, so the thread is reopened;
+- a finding that matches a thread a person resolved is left resolved: that judgement stands;
+- a finding that matches nothing is posted, all new comments in one review;
+- an open thread that no finding matches is resolved: its defect is gone.
 
-Prints `open=<n>` to $GITHUB_OUTPUT for the step that holds the check red.
+A finding matches a thread on the same file, within 3 lines of the thread's line (or of the real
+line a moved comment names), sharing a lens. Each thread and each finding matches at most once,
+the nearest first. A finding on a line the diff does not carry moves to the nearest one it does.
+
+The verdict follows the threads: changes are requested while any thread of this workflow is open,
+and approved, after its earlier requests for changes are dismissed, when none is. An unchanged
+request for changes is edited in place; an older verdict is dismissed and collapsed when a new
+one is posted. Prints `open=<n>` to $GITHUB_OUTPUT for the step that holds the check red.
 """
 
 import json
@@ -25,6 +30,7 @@ MARKER = "<!-- claude-review -->"
 VERDICT_MARKER = "<!-- claude-review-verdict -->"
 SUMMARY_MARKER = "<!-- claude-review-summary -->"
 BOT = "github-actions[bot]"
+BOT_GRAPHQL = "github-actions"
 REQUIRED = "<sub>Required before merge: fix it, or reply with why it does not apply.</sub>"
 NEAR = 3
 
@@ -99,28 +105,21 @@ def anchor(path, line, valid):
     return None, None, note
 
 
+def lenses(text):
+    """The lenses a finding or a comment names: `issue (blocking, security, boundaries)`."""
+    match = re.search(r"issue \(blocking,\s*([^)]*)\)", text)
+    names = match.group(1) if match else text
+    return {name.strip().lower() for name in names.split(",") if name.strip()}
+
+
 THREADS = """
 query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) {
     reviewThreads(first: 100, after: $endCursor) {
       pageInfo { hasNextPage endCursor }
-      nodes { id isResolved path line originalLine
+      nodes { id isResolved resolvedBy { login } path line originalLine
         comments(first: 1) { nodes { id databaseId author { login } body } } } } } }
 }"""
-
-
-def locations(thread):
-    """Where a thread's finding sits: the line it is on, and the real one a moved comment names."""
-    line = thread["line"] or thread["originalLine"] or 0
-    places = {(thread["path"], line)}
-    real = re.match(r"On `?([^`\s]+?):(\d+)`?:", thread["root"]["body"])
-    if real:
-        places.add((real.group(1), int(real.group(2))))
-    return places
-
-
-def same_finding(thread, path, line):
-    return any(where == path and abs(at - line) <= NEAR for where, at in locations(thread))
 
 
 def own_threads():
@@ -133,82 +132,107 @@ def own_threads():
         block = page["repository"]["pullRequest"]["reviewThreads"]
         for thread in block["nodes"]:
             roots = thread["comments"]["nodes"]
-            if roots and roots[0]["author"]["login"] == "github-actions" and MARKER in roots[0]["body"]:
+            if roots and roots[0]["author"]["login"] == BOT_GRAPHQL and MARKER in roots[0]["body"]:
                 thread["root"] = roots[0]
+                thread["lenses"] = lenses(roots[0]["body"])
+                line = thread["line"] or thread["originalLine"] or 0
+                thread["places"] = {(thread["path"], line)}
+                real = re.match(r"On `?([^`\s]+?):(\d+)`?:", roots[0]["body"])
+                if real:
+                    thread["places"].add((real.group(1), int(real.group(2))))
                 threads.append(thread)
         if not block["pageInfo"]["hasNextPage"]:
             return threads
         cursor = block["pageInfo"]["endCursor"]
 
 
+def distance(thread, finding):
+    """How far a finding is from a thread, or None when they are not the same finding."""
+    if not (thread["lenses"] & finding["lenses"]):
+        return None
+    gaps = [abs(at - finding["line"]) for where, at in thread["places"] if where == finding["path"]]
+    gap = min(gaps, default=None)
+    return gap if gap is not None and gap <= NEAR else None
+
+
+def resolve(thread):
+    graphql("mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { id } } }",
+            id=thread["id"])
+
+
+def reopen(thread):
+    graphql("mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { thread { id } } }",
+            id=thread["id"])
+
+
 def main():
     result = json.loads(os.environ["RESULT"])
     valid = diff_lines(os.environ["DIFF"])
     threads = own_threads()
-    by_thread = {thread["id"]: thread for thread in threads}
-    by_comment = {thread["root"]["databaseId"]: thread for thread in threads}
 
-    # Replies, resolutions and reopenings first, on this workflow's own threads only.
-    for reply in result.get("replies", []):
-        if reply["comment_id"] not in by_comment:
-            print(f"skipped reply to {reply['comment_id']}: not this workflow's thread")
+    # The review's list, with exact repeats removed.
+    findings, seen = [], set()
+    for item in result.get("findings", []):
+        key = (item["path"], item["line"], item["body"])
+        if key in seen:
             continue
-        gh(f"{API}/comments/{reply['comment_id']}/replies", "-X", "POST",
-           payload={"body": f"{reply['body']}\n{MARKER}"})
-        print(f"replied to {reply['comment_id']}")
-    for item in result.get("resolve", []):
-        thread = by_thread.get(item["thread_id"])
-        if not thread:
-            print(f"skipped resolving {item['thread_id']}: not this workflow's thread")
-            continue
-        if not thread["isResolved"]:
-            graphql("mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) "
-                    "{ thread { id } } }", id=thread["id"])
+        seen.add(key)
+        findings.append({**item, "lenses": lenses(item.get("lens", "")) or lenses(item["body"])})
+
+    # Match each finding to at most one thread, and each thread to at most one finding.
+    pairs = sorted(
+        (gap, index, thread["id"])
+        for index, finding in enumerate(findings)
+        for thread in threads
+        if (gap := distance(thread, finding)) is not None
+    )
+    matched_finding, matched_thread = {}, {}
+    for gap, index, thread_id in pairs:
+        if index not in matched_finding and thread_id not in matched_thread:
+            matched_finding[index] = thread_id
+            matched_thread[thread_id] = index
+
+    # Threads: keep, reopen, leave, or resolve.
+    for thread in threads:
+        where = f"{thread['path']}:{thread['line'] or thread['originalLine']}"
+        if thread["id"] in matched_thread:
+            if not thread["isResolved"]:
+                print(f"kept {where}: still present")
+            elif (thread["resolvedBy"] or {}).get("login") == BOT_GRAPHQL:
+                reopen(thread)
+                thread["isResolved"] = False
+                print(f"reopened {where}: the defect is back")
+            else:
+                who = (thread["resolvedBy"] or {}).get("login", "someone")
+                print(f"left {where}: resolved by {who}")
+        elif not thread["isResolved"]:
+            resolve(thread)
             thread["isResolved"] = True
-        graphql("mutation($id: ID!) { minimizeComment(input: {subjectId: $id, "
-                "classifier: RESOLVED}) { clientMutationId } }", id=thread["root"]["id"])
-        print(f"resolved and hid {thread['id']}")
-    for item in result.get("reopen", []):
-        thread = by_thread.get(item["thread_id"])
-        if not thread or not thread["isResolved"]:
-            print(f"skipped reopening {item['thread_id']}")
-            continue
-        graphql("mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) "
-                "{ thread { id } } }", id=thread["id"])
-        thread["isResolved"] = False
-        print(f"reopened {thread['id']}")
+            print(f"resolved {where}: no longer found")
 
-    # New comments: drop any an open thread of this workflow already makes, then anchor.
-    open_threads = [thread for thread in threads if not thread["isResolved"]]
+    # New findings: posted, all in one review.
     comments = []
-    for item in result.get("comments", []):
-        path, line, note = anchor(item["path"], item["line"], valid)
-        if path is None:
-            print(f"skipped {item['path']}:{item['line']}: the diff carries no line to comment on")
+    for index, finding in enumerate(findings):
+        if index in matched_finding:
             continue
-        # The same finding as an open thread, by where the model puts it or where it lands.
-        same = [
-            thread for thread in open_threads
-            if same_finding(thread, item["path"], item["line"]) or (not note and same_finding(thread, path, line))
-        ]
-        # ...or as a comment this run already queued.
-        if same or any(queued["at"] == (item["path"], item["line"]) for queued in comments):
-            print(f"skipped {item['path']}:{item['line']}: already open")
+        path, line, note = anchor(finding["path"], finding["line"], valid)
+        if path is None:
+            print(f"skipped {finding['path']}:{finding['line']}: the diff carries no line to comment on")
             continue
         comments.append({
-            "at": (item["path"], item["line"]),
             "path": path, "line": line, "side": "RIGHT",
-            "body": f"{note}{item['body']}\n\n{REQUIRED}\n{MARKER}",
+            "body": f"{note}{finding['body']}\n\n{REQUIRED}\n{MARKER}",
         })
+        print(f"new {finding['path']}:{finding['line']}")
 
     # The verdict follows the threads: every open one, old or new, is a required finding.
     open_count = len([thread for thread in threads if not thread["isResolved"]]) + len(comments)
     if open_count:
         event = "REQUEST_CHANGES"
         body = (f"❌ **Changes requested** — {open_count} open finding(s).\n\n"
-                "Every finding is required: each one blocks the merge until it is fixed, or a "
-                "reply disputes it and the review accepts the reply. Resolve every thread before "
-                f"merging.\n{VERDICT_MARKER}")
+                "Every finding is required: each one blocks the merge until it is fixed, or someone "
+                "with write access replies with why it does not apply and resolves its thread. "
+                f"Resolve every thread before merging.\n{VERDICT_MARKER}")
     else:
         event = "APPROVE"
         body = ("✅ **Approved** — no open findings.\n\n"
@@ -231,8 +255,7 @@ def main():
         print(f"verdict {latest['id']} already approves")
         posted = latest
     else:
-        queued = [{key: value for key, value in comment.items() if key != "at"} for comment in comments]
-        payload = {"commit_id": HEAD, "event": event, "body": body, "comments": queued}
+        payload = {"commit_id": HEAD, "event": event, "body": body, "comments": comments}
         posted = gh(f"{API}/reviews", "-X", "POST", payload=payload, check=False)
         if posted is None:
             print(f"GitHub refused {event}; posting the same review as a comment-review")
