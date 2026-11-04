@@ -15,6 +15,7 @@ crash.*.log
 # Credentials
 *.json
 !package.json
+!package-lock.json
 !.terraform.lock.hcl
 *.pem
 *.key

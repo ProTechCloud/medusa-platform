@@ -63,7 +63,7 @@ match of the whole string — there is no wildcard anywhere.
 |---|---|
 | plan hub | this repo · the shared plan workflow · a PR or `dev` |
 | apply hub | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
-| backend deploy hub | the app repo · its deploy workflow · `stg` environment · `refs/heads/stg` |
+| backend deploy hub | the app repo · `backend-cd.yml` · `backend-stg` environment · `refs/heads/stg`; `deploy-stg.yml` · `stg` environment stays until the first deploy under the new name |
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
@@ -424,11 +424,13 @@ nobody listed in advance.
 |---|---|---|
 | `live-plan` | every PR | plans all six stacks; `Plan stg` and `Plan prd` always report, the Cloudflare and PostHog stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks, trivy → **Code Quality Summary** |
+| `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
 | `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `{gcp,cloudflare}-prd-live-apply` | every push | **switched off** — shows as skipped |
 
-Branch protection requires `Plan stg / plan`, `Plan prd / plan` and `Code Quality Summary`.
+Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Code Quality Summary` and
+`Quality — PR Template`.
 A check that never runs counts as passed, which is why the plan jobs always run and why the
 summary job exists at all.
 
