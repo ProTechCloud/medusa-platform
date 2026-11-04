@@ -123,6 +123,78 @@ jobs:
             cp "$path" "$OUT"
           fi
 
+      # The diff as files, so the lens subagents need nothing but read tools.
+      - name: Write the diff files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/claude-review.diff"
+          git diff -U0 "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/claude-review-u0.diff"
+          wc -l "$RUNNER_TEMP"/claude-review*.diff
+
+      # One subagent per lens, plus the checker, built from the base-branch
+      # rules and written over anything the pull request put at those paths.
+      # Read-only tools: a subagent can look, never post.
+      - name: Build the review subagents
+        shell: python
+        env:
+          RULES: ${{ runner.temp }}/claude-review-rules.md
+        run: |
+          import os, re
+
+          rules = open(os.environ["RULES"], encoding="utf-8").read()
+          sections = dict(
+              (m.group(1).strip(), m.group(2).strip())
+              for m in re.finditer(r"^## (.+?)\n(.*?)(?=^## |\Z)", rules, re.S | re.M)
+          )
+          lenses = dict(
+              (m.group(1).strip(), m.group(2).strip())
+              for m in re.finditer(r"^### \d+ · (.+?)\n(.*?)(?=^### |\Z)", sections["Lenses"], re.S | re.M)
+          )
+          expected = ["security", "conventions", "tests", "boundaries", "performance", "correctness", "intent"]
+          missing = [name for name in expected if name not in lenses]
+          if missing or "Checking" not in sections or "Repo rules" not in sections:
+              raise SystemExit(f"rules file is missing sections: {missing}")
+
+          os.makedirs(".claude/agents", exist_ok=True)
+
+          def write(name, description, body):
+              with open(f".claude/agents/{name}.md", "w", encoding="utf-8") as out:
+                  out.write(f"---\nname: {name}\ndescription: {description}\n")
+                  out.write("tools: Read, Grep, Glob\nmodel: inherit\n---\n\n")
+                  out.write(body + "\n")
+
+          shared = (
+              "# Ground rules\n\n" + sections["Ground rules"]
+              + "\n\n# Repo rules\n\n" + sections["Repo rules"]
+          )
+          for name in expected:
+              write(
+                  f"review-{name}",
+                  f"The {name} lens of the pull request review. Use only when the review dispatches it.",
+                  f"You are the **{name}** lens of a pull request review. You only read: never edit, "
+                  "post, approve or comment.\n\n"
+                  "Your prompt gives the SHAs, the paths of the diff file, the zero-context diff file "
+                  "and the context file, the PR title and body, and your leads. Read the diff file "
+                  "(page a large one with offset and limit), read the docs listed for your lens under "
+                  "_Repo rules → Docs per lens_, then judge every changed file through your lens only.\n\n"
+                  "Answer with one entry per finding — `file:line`, severity, `outside` yes or no, the "
+                  "problem in one sentence, the fix in one imperative sentence, an optional why of two "
+                  f"to four sentences — or exactly `Clean ({name}).` End with any changed file you did "
+                  "not examine and why.\n\n"
+                  f"# Your lens\n\n{lenses[name]}\n\n{shared}",
+              )
+          write(
+              "review-checker",
+              "Independently checks merged review findings. Use only when the review dispatches it.",
+              "You are the **checker** of a pull request review. You did not write the findings you "
+              "are given and you never see why they were written. You only read: never edit, post, "
+              "approve or comment.\n\nFor each finding, answer its id, its result, a quote of the "
+              "deciding line prefixed `path:line: `, and why in one sentence.\n\n"
+              f"# Checking\n\n{sections['Checking']}\n\n{shared}",
+          )
+          print(sorted(os.listdir(".claude/agents")))
+
       # The whole conversation and history, so the review starts knowing what
       # was already said and fixed: every commit with its hash, every review,
       # every inline comment with its replies, every review thread with its
@@ -196,10 +268,20 @@ jobs:
             HEAD SHA: ${{ env.HEAD_SHA }}
             RULES FILE: ${{ runner.temp }}/claude-review-rules.md
             CONTEXT FILE: ${{ runner.temp }}/claude-review-context.md
+            DIFF FILE: ${{ runner.temp }}/claude-review.diff
+            ZERO-CONTEXT DIFF FILE: ${{ runner.temp }}/claude-review-u0.diff
 
-            Review this pull request. Read the rules file first and follow it
-            exactly. Then read the context file: every commit with its hash,
-            and every review, thread, comment and reply already on the PR.
+            You orchestrate this review; you do not review the code yourself.
+            Read the rules file first and follow its run order exactly. Then
+            read the context file: every commit with its hash, and every
+            review, thread, comment and reply already on the PR.
+
+            The seven lenses and the checker are subagents: review-security,
+            review-conventions, review-tests, review-boundaries,
+            review-performance, review-correctness, review-intent and
+            review-checker. Dispatch all seven lenses with the Agent tool in a
+            single message, then the checker. The workflow fails this run if
+            any of them did not run.
           claude_args: |
             --model claude-sonnet-5-5
             --max-turns 120
@@ -208,7 +290,7 @@ jobs:
               "properties": {"open_findings": {"type": "integer"}, "verdict": {"type": "string"}},
               "required": ["open_findings", "verdict"]}'
             --allowedTools
-              "Read,Grep,Glob,Task"
+              "Read,Grep,Glob,Agent,Task"
               "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
               "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
               "Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/comments:*)"
@@ -216,6 +298,33 @@ jobs:
               "Bash(gh api repos/${{ github.repository }}/pulls/comments/:*)"
               "Bash(gh api repos/${{ github.repository }}/issues/comments/:*)"
               "Bash(gh api graphql:*)"
+
+      # Proof the review was the review: every lens subagent ran, and the
+      # checker ran whenever there was anything to check. Read from the run's
+      # own log, never from what Claude says it did.
+      - name: Require every lens to have run
+        shell: bash
+        env:
+          EXECUTION: ${{ steps.claude.outputs.execution_file }}
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          ran=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]?
+            | select(.type == "tool_use" and (.name == "Agent" or .name == "Task"))
+            | .input.subagent_type] | unique | .[]' "$EXECUTION")
+          echo "subagents that ran: $(echo "$ran" | tr '\n' ' ')"
+          missing=""
+          for lens in security conventions tests boundaries performance correctness intent; do
+            grep -qx "review-$lens" <<<"$ran" || missing="$missing review-$lens"
+          done
+          open=$(jq -r '.open_findings' <<<"$RESULT")
+          if [ "$open" != 0 ] && ! grep -qx review-checker <<<"$ran"; then
+            missing="$missing review-checker"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::the review did not run:$missing"
+            exit 1
+          fi
 
       # Every finding is required: the check stays red while any is open, the
       # review requests changes, and the dev ruleset requires every review
