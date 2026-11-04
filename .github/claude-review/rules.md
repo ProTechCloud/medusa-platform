@@ -236,12 +236,13 @@ Comments use [Conventional Comments](https://conventionalcomments.org). Every fi
 
 ### `comments` — one per new finding
 
-Every new finding is one entry `{path, line, body}`, on its own line of the pull request, even
-when another reviewer or bot has a thread there. The only finding not listed again is one whose
-own earlier comment from this workflow is still open (step 6). `line` is the line in the head
-file; a finding flagged `outside` goes on the nearest added line of the same file, or, when that
-file has no added line, on the first added line of the pull request, and its body starts with the
-real location: `On <path>:<line>:`. The body is:
+Every new finding is one entry `{path, line, body}`, even when another reviewer or bot has a
+thread there. The only finding not listed again is one whose own earlier comment from this
+workflow is still open (step 6). `path` and `line` are always the finding's **real** location in
+the head file, even when that line is outside the diff: the workflow moves such a comment to the
+nearest line the diff carries and names the real location itself. Never write that location into
+the body. A finding about the PR description goes on the first added line of the PR. The body
+is:
 
 ```
 **issue (blocking, <lens>):** <severity> <problem>

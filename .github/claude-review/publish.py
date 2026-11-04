@@ -113,7 +113,7 @@ def locations(thread):
     """Where a thread's finding sits: the line it is on, and the real one a moved comment names."""
     line = thread["line"] or thread["originalLine"] or 0
     places = {(thread["path"], line)}
-    real = re.match(r"On `(.+):(\d+)`:", thread["root"]["body"])
+    real = re.match(r"On `?([^`\s]+?):(\d+)`?:", thread["root"]["body"])
     if real:
         places.add((real.group(1), int(real.group(2))))
     return places
