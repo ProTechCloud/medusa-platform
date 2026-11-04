@@ -10,6 +10,8 @@ review thread to be resolved.
 
 **What this review posts, and nothing else:** one inline comment per finding, on its line, and one
 verdict review — changes requested or approved. No summary comment, no conversation comment.
+The approval never lets a pull request merge on its own: a code owner still has to approve. The
+request for changes always blocks.
 
 ## Run order
 
@@ -28,8 +30,10 @@ verdict review — changes requested or approved. No summary comment, no convers
    `review-boundaries`, `review-performance`, `review-correctness`, `review-intent`. Each subagent
    already holds its lens, the _Ground rules_ and the _Repo rules_; its prompt gives it the SHAs,
    the paths of the diff and context files, the PR title and body, and the leads that belong to
-   it. Each answers with findings, or exactly `Clean (<lens>).` **Never review a lens yourself:**
-   the workflow fails the run when any of the seven subagents did not run.
+   it. Each answers with findings, or exactly `Clean (<lens>).` **Wait for all seven answers
+   before going on.** Never review a lens yourself, and never finish while a subagent is still
+   running: the workflow fails the run when any of the seven did not run, or when the verdict is
+   anything but `changes requested` or `approved`.
 4. **Merge.** One finding per defect: merge any within ±3 lines of each other, keep the higher
    severity, and keep every lens that raised it.
 5. **Check.** Call the **Agent** tool once with the `review-checker` subagent, giving it only the
@@ -49,9 +53,10 @@ verdict review — changes requested or approved. No summary comment, no convers
      `still present at <sha>`.
 
    Never resolve, hide or edit a comment this workflow did not post.
-7. **Publish.** Follow _Publishing_. Then answer with the structured output: `open_findings`, the
-   number of findings still open after this run — new ones plus earlier ones still present — and
-   `verdict`, `changes requested` or `approved`.
+7. **Publish.** Follow _Publishing_. Then answer with the structured output: `candidates`, the
+   number of merged findings handed to the checker in step 5 (0 when every lens was clean);
+   `open_findings`, the number still open after this run — new ones plus earlier ones still
+   present; and `verdict`, exactly `changes requested` or `approved`.
 
 ## Ground rules
 
@@ -255,23 +260,29 @@ Posted after the inline comments, on the head commit:
 - **No open findings**: first dismiss every earlier `CHANGES_REQUESTED` review this workflow left
   (the ones carrying `<!-- claude-review-verdict -->`, from the context file's reviews), with
   `gh api repos/<REPO>/pulls/<PR>/reviews/<id>/dismissals -X PUT -f event=DISMISS -f message=<msg>`
-  and the message `Every finding is resolved at <sha>.` Then post `event=COMMENT` with:
+  and the message `Every finding is resolved at <sha>.` Then approve:
+
+  ```
+  gh api repos/<REPO>/pulls/<PR>/reviews -X POST -f commit_id=<HEAD SHA> \
+    -f event=APPROVE -f body=<body>
+  ```
 
   ```
   ✅ **Approved** — no open findings.
 
-  Every finding was required, and every one is resolved. A human approval is still needed to merge.
+  Every finding was required, and every one is resolved. This approval does not count toward the
+  merge: a code owner still has to approve.
   <!-- claude-review-verdict -->
   ```
 
-  This workflow cannot give a GitHub approval; the ✅ review is its verdict.
+  If GitHub refuses `APPROVE` for this token, post the same body with `event=COMMENT`.
 
 ### Never
 
 - A summary or conversation comment. If an earlier run left one (it carries
   `<!-- claude-review-summary -->`), delete it:
   `gh api repos/<REPO>/issues/comments/<id> -X DELETE`.
-- `APPROVE`, or a verdict that disagrees with `open_findings`.
+- A verdict that disagrees with `open_findings`, or `APPROVE` while any finding is open.
 - `'` or `"` between a `{` and its `}` in any body; use backticks there instead.
 
 ## Repo rules

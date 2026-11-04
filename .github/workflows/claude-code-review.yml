@@ -258,6 +258,10 @@ jobs:
       # API key. Comments post as github-actions[bot] through GITHUB_TOKEN.
       - uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1
         id: claude
+        env:
+          # Subagents run in the foreground, so every Agent call returns its
+          # result before the session can end.
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
@@ -280,15 +284,17 @@ jobs:
             review-conventions, review-tests, review-boundaries,
             review-performance, review-correctness, review-intent and
             review-checker. Dispatch all seven lenses with the Agent tool in a
-            single message, then the checker. The workflow fails this run if
-            any of them did not run.
+            single message, wait for every answer, then run the checker. The
+            workflow fails this run if any of them did not run, or if the
+            verdict is anything but "changes requested" or "approved".
           claude_args: |
             --model claude-sonnet-5-5
             --max-turns 120
             --add-dir ${{ runner.temp }}
             --json-schema '{"type": "object",
-              "properties": {"open_findings": {"type": "integer"}, "verdict": {"type": "string"}},
-              "required": ["open_findings", "verdict"]}'
+              "properties": {"candidates": {"type": "integer"}, "open_findings": {"type": "integer"},
+                "verdict": {"type": "string", "enum": ["changes requested", "approved"]}},
+              "required": ["candidates", "open_findings", "verdict"]}'
             --allowedTools
               "Read,Grep,Glob,Agent,Task"
               "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
@@ -317,14 +323,22 @@ jobs:
           for lens in security conventions tests boundaries performance correctness intent; do
             grep -qx "review-$lens" <<<"$ran" || missing="$missing review-$lens"
           done
+          candidates=$(jq -r '.candidates' <<<"$RESULT")
           open=$(jq -r '.open_findings' <<<"$RESULT")
-          if [ "$open" != 0 ] && ! grep -qx review-checker <<<"$ran"; then
+          verdict=$(jq -r '.verdict' <<<"$RESULT")
+          if [ "$candidates" != 0 ] && ! grep -qx review-checker <<<"$ran"; then
             missing="$missing review-checker"
           fi
           if [ -n "$missing" ]; then
             echo "::error::the review did not run:$missing"
             exit 1
           fi
+          case "$verdict/$open" in
+            "approved/0") ;;
+            "changes requested/0") echo "::error::changes requested with no open finding"; exit 1 ;;
+            "changes requested/"*) ;;
+            *) echo "::error::verdict \"$verdict\" does not match $open open finding(s)"; exit 1 ;;
+          esac
 
       # Every finding is required: the check stays red while any is open, the
       # review requests changes, and the dev ruleset requires every review
