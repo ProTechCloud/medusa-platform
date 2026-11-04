@@ -102,15 +102,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # The rules come from the base branch, never from the pull request, so a
-      # pull request cannot weaken its own review. The one exception is the
-      # pull request that adds them, when the base has none yet.
+      # The rules and the PR template come from the base branch, never from the
+      # pull request, so a pull request cannot weaken its own review. The one
+      # exception is the pull request that adds the rules, when the base has
+      # none yet.
       - name: Take the rules from the base branch
         shell: bash
         env:
           OUT: ${{ runner.temp }}/claude-review-rules.md
+          TEMPLATE: ${{ runner.temp }}/claude-review-template.md
         run: |
           set -euo pipefail
+          if git cat-file -e "$BASE_SHA:.github/pull_request_template.md" 2>/dev/null; then
+            git show "$BASE_SHA:.github/pull_request_template.md" > "$TEMPLATE"
+          else
+            echo "This repository has no pull request template." > "$TEMPLATE"
+          fi
           path=.github/claude-review/rules.md
           if git cat-file -e "$BASE_SHA:$path" 2>/dev/null; then
             git show "$BASE_SHA:$path" > "$OUT"
@@ -252,7 +259,8 @@ jobs:
           wc -l "$OUT"
 
       # Authenticates with the Claude subscription (claude setup-token), not an
-      # API key. Comments post as github-actions[bot] through GITHUB_TOKEN.
+      # API key. Claude only reads: it returns the review as structured output,
+      # and the Publish step posts it.
       - uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1
         id: claude
         env:
@@ -271,6 +279,7 @@ jobs:
             CONTEXT FILE: ${{ runner.temp }}/claude-review-context.md
             DIFF FILE: ${{ runner.temp }}/claude-review.diff
             ZERO-CONTEXT DIFF FILE: ${{ runner.temp }}/claude-review-u0.diff
+            TEMPLATE FILE: ${{ runner.temp }}/claude-review-template.md
 
             You orchestrate this review; you do not review the code yourself.
             Read the rules file first and follow its run order exactly. Then
@@ -281,7 +290,9 @@ jobs:
             review-conventions, review-tests, review-boundaries,
             review-performance, review-correctness, review-intent and
             review-checker. Dispatch all seven lenses with the Agent tool in a
-            single message, wait for every answer, then run the checker. The
+            single message, wait for every answer, then run the checker. Give
+            review-intent the PR title and body verbatim and the template
+            file: the description is part of the change it reviews. The
             workflow fails this run if any of them did not run, or if the
             verdict is anything but "changes requested" or "approved".
           claude_args: |
@@ -289,18 +300,28 @@ jobs:
             --max-turns 120
             --add-dir ${{ runner.temp }}
             --json-schema '{"type": "object",
-              "properties": {"candidates": {"type": "integer"}, "open_findings": {"type": "integer"},
-                "verdict": {"type": "string", "enum": ["changes requested", "approved"]}},
-              "required": ["candidates", "open_findings", "verdict"]}'
+              "properties": {
+                "candidates": {"type": "integer"},
+                "open_findings": {"type": "integer"},
+                "verdict": {"type": "string", "enum": ["changes requested", "approved"]},
+                "comments": {"type": "array", "items": {"type": "object",
+                  "properties": {"path": {"type": "string"}, "line": {"type": "integer"},
+                    "body": {"type": "string"}},
+                  "required": ["path", "line", "body"]}},
+                "replies": {"type": "array", "items": {"type": "object",
+                  "properties": {"comment_id": {"type": "integer"}, "body": {"type": "string"}},
+                  "required": ["comment_id", "body"]}},
+                "resolve": {"type": "array", "items": {"type": "object",
+                  "properties": {"thread_id": {"type": "string"}, "comment_node_id": {"type": "string"}},
+                  "required": ["thread_id", "comment_node_id"]}},
+                "reopen": {"type": "array", "items": {"type": "object",
+                  "properties": {"thread_id": {"type": "string"}}, "required": ["thread_id"]}}},
+              "required": ["candidates", "open_findings", "verdict", "comments", "replies", "resolve",
+                "reopen"]}'
             --allowedTools
               "Read,Grep,Glob,Agent,Task"
               "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
-              "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
-              "Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/comments:*)"
-              "Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/reviews:*)"
-              "Bash(gh api repos/${{ github.repository }}/pulls/comments/:*)"
-              "Bash(gh api repos/${{ github.repository }}/issues/comments/:*)"
-              "Bash(gh api graphql:*)"
+              "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*)"
 
       # The full transcript of the run — every tool call, every subagent's
       # answer, every denial — kept for three days to debug a run that went
@@ -348,6 +369,109 @@ jobs:
             "changes requested/"*) ;;
             *) echo "::error::verdict \"$verdict\" does not match $open open finding(s)"; exit 1 ;;
           esac
+
+      # Posts the review from the structured output, the same way every run:
+      # one inline comment per finding, replies, resolved and reopened
+      # threads, then one verdict review. Only this workflow's own threads
+      # and comments are touched; anything else in the output is skipped.
+      - name: Publish the review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY/pulls/$PR"
+          marker="<!-- claude-review -->"
+          required="<sub>Required before merge: fix it, or reply with why it does not apply.</sub>"
+          # shellcheck disable=SC2016 # GraphQL variables, not shell ones
+          own_node='query($id: ID!) { node(id: $id) { ... on PullRequestReviewComment {
+            author { login } body } } }'
+          # shellcheck disable=SC2016
+          own_thread='query($id: ID!) { node(id: $id) { ... on PullRequestReviewThread {
+            comments(first: 1) { nodes { author { login } body } } } } }'
+          is_ours() { jq -e --arg m "$marker" \
+            '(.author.login == "github-actions") and (.body | contains($m))' >/dev/null; }
+
+          while read -r item <&3; do
+            body="$(jq -r '.body' <<<"$item")"$'\n\n'"$required"$'\n'"$marker"
+            if ! jq -n --arg commit "$HEAD_SHA" --arg body "$body" --argjson item "$item" \
+                '{commit_id: $commit, path: $item.path, line: $item.line, side: "RIGHT", body: $body}' \
+                | gh api "$api/comments" -X POST --input - --jq '"posted \(.path):\(.line)"'; then
+              # The line is not in the diff: comment on the file instead.
+              jq -n --arg commit "$HEAD_SHA" --arg body "$body" --argjson item "$item" \
+                '{commit_id: $commit, path: $item.path, subject_type: "file",
+                  body: ("On line \($item.line):\n\n" + $body)}' \
+                | gh api "$api/comments" -X POST --input - --jq '"posted on file \(.path)"'
+            fi
+          done 3< <(jq -c '.comments[]' <<<"$RESULT")
+
+          while read -r item <&3; do
+            id=$(jq -r '.comment_id' <<<"$item")
+            if gh api "repos/$GITHUB_REPOSITORY/pulls/comments/$id" \
+                --jq '{author: {login: (.user.login | sub("\\[bot\\]$"; ""))}, body}' | is_ours; then
+              jq -n --arg body "$(jq -r '.body' <<<"$item")"$'\n'"$marker" '{body: $body}' \
+                | gh api "$api/comments/$id/replies" -X POST --input - --jq '"replied to \(.in_reply_to_id)"'
+            else echo "skipped reply to $id: not this workflow's comment"; fi
+          done 3< <(jq -c '.replies[]' <<<"$RESULT")
+
+          while read -r item <&3; do
+            thread=$(jq -r '.thread_id' <<<"$item"); node=$(jq -r '.comment_node_id' <<<"$item")
+            if gh api graphql -F id="$thread" -f query="$own_thread" \
+                --jq '.data.node.comments.nodes[0]' | is_ours \
+              && gh api graphql -F id="$node" -f query="$own_node" --jq '.data.node' | is_ours; then
+              # shellcheck disable=SC2016
+              gh api graphql -F id="$thread" -f query='mutation($id: ID!) {
+                resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }' >/dev/null
+              # shellcheck disable=SC2016
+              gh api graphql -F id="$node" -f query='mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: RESOLVED}) { clientMutationId } }' >/dev/null
+              echo "resolved and hid $thread"
+            else echo "skipped $thread: not this workflow's thread"; fi
+          done 3< <(jq -c '.resolve[]' <<<"$RESULT")
+
+          while read -r item <&3; do
+            thread=$(jq -r '.thread_id' <<<"$item")
+            if gh api graphql -F id="$thread" -f query="$own_thread" \
+                --jq '.data.node.comments.nodes[0]' | is_ours; then
+              # shellcheck disable=SC2016
+              gh api graphql -F id="$thread" -f query='mutation($id: ID!) {
+                unresolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }' >/dev/null
+              echo "reopened $thread"
+            else echo "skipped $thread: not this workflow's thread"; fi
+          done 3< <(jq -c '.reopen[]' <<<"$RESULT")
+
+          open=$(jq -r '.open_findings' <<<"$RESULT")
+          verdict_marker="<!-- claude-review-verdict -->"
+          if [ "$open" != 0 ]; then
+            body=$(printf '%s\n\n%s %s\n%s' \
+              "❌ **Changes requested** — $open open finding(s)." \
+              "Every finding is required: each one blocks the merge until it is fixed, or a reply" \
+              "disputes it and the review accepts the reply. Resolve every thread before merging." \
+              "$verdict_marker")
+            event=REQUEST_CHANGES
+          else
+            gh api --paginate "$api/reviews" | jq -r --arg m "$verdict_marker" \
+              '.[] | select(.user.login == "github-actions[bot]" and .state == "CHANGES_REQUESTED"
+                and (.body | contains($m))) | .id' \
+              | while read -r id; do
+                  gh api "$api/reviews/$id/dismissals" -X PUT -f event=DISMISS \
+                    -f message="Every finding is resolved at ${HEAD_SHA:0:7}." --jq '"dismissed review \(.id)"' \
+                    </dev/null
+                done
+            body=$(printf '%s\n\n%s %s\n%s' \
+              "✅ **Approved** — no open findings." \
+              "Every finding was required, and every one is resolved. This approval does not count" \
+              "toward the merge: a code owner still has to approve." \
+              "$verdict_marker")
+            event=APPROVE
+          fi
+          if ! gh api "$api/reviews" -X POST -f commit_id="$HEAD_SHA" -f event="$event" -f body="$body" \
+              --jq '"verdict: \(.state)"'; then
+            echo "GitHub refused $event for this token; posting the verdict as a comment-review"
+            gh api "$api/reviews" -X POST -f commit_id="$HEAD_SHA" -f event=COMMENT -f body="$body" \
+              --jq '"verdict: \(.state)"'
+          fi
 
       # Every finding is required: the check stays red while any is open, the
       # review requests changes, and the dev ruleset requires every review

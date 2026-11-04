@@ -29,8 +29,8 @@ request for changes always blocks.
    parallel, once per lens subagent: `review-security`, `review-conventions`, `review-tests`,
    `review-boundaries`, `review-performance`, `review-correctness`, `review-intent`. Each subagent
    already holds its lens, the _Ground rules_ and the _Repo rules_; its prompt gives it the SHAs,
-   the paths of the diff and context files, the PR title and body, and the leads that belong to
-   it. Each answers with findings, or exactly `Clean (<lens>).` **Wait for all seven answers
+   the paths of the diff, context and template files, the PR title and body verbatim, and the
+   leads that belong to it. Each answers with findings, or exactly `Clean (<lens>).` **Wait for all seven answers
    before going on.** Never review a lens yourself, and never finish while a subagent is still
    running: the workflow fails the run when any of the seven did not run, or when the verdict is
    anything but `changes requested` or `approved`.
@@ -39,24 +39,23 @@ request for changes always blocks.
 5. **Check.** Call the **Agent** tool once with the `review-checker` subagent, giving it only the
    merged findings and the file paths — none of the lenses' reasoning. It follows _Checking_.
    Findings it rejects are dropped. Skip this step only when every lens came back clean.
-6. **Clear what is resolved.** Go through every earlier comment this workflow posted (the ones
-   carrying `<!-- claude-review -->`), using the thread ids in the context file:
-   - **Defect gone from the head** — fixed, or the line no longer exists: resolve the thread and
-     hide the comment as resolved, so nothing stale is left on the pull request:
-     `resolveReviewThread(input: {threadId})` and
-     `minimizeComment(input: {subjectId, classifier: RESOLVED})` through `gh api graphql`.
-   - **Disputed in a reply** — hand the reply to the checker as a counter-claim. If it holds,
-     clear the thread as above and reply once with the reason it was accepted. If it does not,
-     leave the thread open and reply once with the checker's quote.
+6. **Decide what to clear.** Go through every earlier comment this workflow posted (the ones
+   carrying `<!-- claude-review -->`), using the thread ids and node ids in the context file:
+   - **Defect gone from the head** — fixed, or the line no longer exists: put the thread in
+     `resolve`, so the workflow resolves it and hides its comment.
+   - **Disputed in a reply** — hand the reply to the checker as a counter-claim. If it holds, put
+     the thread in `resolve` and add one entry to `replies` with the reason it was accepted. If it
+     does not, add one entry to `replies` with the checker's quote and keep the finding open.
    - **Still present** — keep it open and do not post it again. If someone resolved the thread
-     without a fix or an accepted reply, reopen it (`unresolveReviewThread`) and reply once:
+     without a fix or an accepted reply, put it in `reopen` and add one `replies` entry:
      `still present at <sha>`.
 
-   Never resolve, hide or edit a comment this workflow did not post.
-7. **Publish.** Follow _Publishing_. Then answer with the structured output: `candidates`, the
-   number of merged findings handed to the checker in step 5 (0 when every lens was clean);
-   `open_findings`, the number still open after this run — new ones plus earlier ones still
-   present; and `verdict`, exactly `changes requested` or `approved`.
+   Never list a thread or comment this workflow did not post; the workflow checks and skips any.
+7. **Answer.** You post nothing yourself: the workflow posts from your structured output, the
+   same way every run. Fill it per _Publishing_: `candidates`, the number of merged findings
+   handed to the checker in step 5 (0 when every lens was clean); `open_findings`, the number
+   still open after this run — new ones plus earlier ones still present; `verdict`, exactly
+   `changes requested` or `approved`; and `comments`, `replies`, `resolve` and `reopen`.
 
 ## Ground rules
 
@@ -89,8 +88,11 @@ request for changes always blocks.
 - **Say it now.** There is no second pass.
 - **Cover every file.** Before answering, go down the changed-file list; anything not examined is
   named with the reason.
-- **Read-only.** Lenses never edit, push, approve, request changes or comment; only the main agent
-  publishes.
+- **Read-only.** Nobody in this review edits, pushes, approves, requests changes or comments; the
+  workflow publishes from the structured output.
+- **Tools, not pipelines.** Inspect files with the Read, Grep and Glob tools. The shell is only for
+  single `git diff`, `git log`, `git show`, `gh pr view` and `gh issue view` commands — no pipes,
+  no `cd`, no `&&`; anything else is refused.
 
 ## Lenses
 
@@ -175,13 +177,34 @@ duplication, trap → ⚠️. Small dead code → 💡.
 Sources, strongest first: the issue the PR closes, the PR body, any doc the PR names. Without any,
 say so once; it is a gap, not a finding.
 
-Look for: each stated requirement or acceptance criterion without `file:line` evidence in the diff
-or the existing code; a claim in the body ("fixes X", "prevents Y") with no test, plan output or
-repro behind it (⚠️, asked as a question); deletions or changes unrelated to the stated purpose;
-code nothing asked for (💡, ⚠️ when risky).
+**The PR description is part of the change, and this lens reviews it.** Read the template file —
+the base branch's `.github/pull_request_template.md`, never the PR's own copy — and the PR title
+and body, then check:
 
-Severity: required behaviour missing → 🚨. Partial, unevidenced claim, unrelated deletion → ⚠️.
-Extras → 💡.
+- **It follows the template.** Every section of the template is present, under its heading, and
+  holds real content: not the template's own comments, not a placeholder, not "N/A" where the
+  section asks something that applies. Every checklist item is present and answered.
+- **It is true to the diff.** Every area the diff changes is described — a changed workflow, a
+  changed trust rule, a removed file, a new variable or secret. Nothing is claimed that the diff
+  does not do. A checked checklist item the diff contradicts (docs updated when none were, tests
+  run when none exist for the change) is a finding.
+- **The title** follows Conventional Commits (`type(scope): summary`, the types in the template)
+  and names what the change actually does.
+- **Risk and rollback**, where the template asks for it: a change to production state, trust,
+  secrets or a required check that the body does not name.
+
+A description finding has no line of its own: anchor it on the first added line of the PR, flagged
+`outside`, with a problem that starts `In the PR description:`.
+
+Look for, in the code: each stated requirement or acceptance criterion without `file:line`
+evidence in the diff or the existing code; a claim in the body ("fixes X", "prevents Y") with no
+test, plan output or repro behind it (⚠️, asked as a question); deletions or changes unrelated to
+the stated purpose; code nothing asked for (💡, ⚠️ when risky).
+
+Severity: required behaviour missing → 🚨. A template section missing or empty, a description that
+leaves out a changed area or claims what the diff does not do, a title that breaks the convention,
+partial coverage, an unevidenced claim, an unrelated deletion → ⚠️. Extras → 💡. Every one is
+still required before merge.
 
 ## Checking
 
@@ -205,19 +228,20 @@ and all blocking.
 
 ## Publishing
 
+You never post, edit, resolve or approve anything yourself, and you have no tool that can. The
+workflow does all of it from your structured output, after checking that every lens ran.
+
 Comments use [Conventional Comments](https://conventionalcomments.org). Every finding is an
 `issue (blocking)`, whatever its severity; the severity and the lens stay in the comment.
 
-### Inline comments — one per finding
+### `comments` — one per new finding
 
-Every finding is posted on its own line of the pull request, even when another reviewer or bot has
-a thread there; the only finding not posted again is one whose own earlier comment from this
-workflow is still open (step 6). Put the flags after the endpoint:
-
-```
-gh api repos/<REPO>/pulls/<PR>/comments -X POST -f commit_id=<HEAD SHA> \
-  -f path=<file> -F line=<line> -f side=RIGHT -f body=<body>
-```
+Every new finding is one entry `{path, line, body}`, on its own line of the pull request, even
+when another reviewer or bot has a thread there. The only finding not listed again is one whose
+own earlier comment from this workflow is still open (step 6). `line` is the line in the head
+file; a finding flagged `outside` goes on the nearest added line of the same file, or, when that
+file has no added line, on the first added line of the pull request, and its body starts with the
+real location: `On <path>:<line>:`. The body is:
 
 ```
 **issue (blocking, <lens>):** <severity> <problem>
@@ -225,64 +249,33 @@ gh api repos/<REPO>/pulls/<PR>/comments -X POST -f commit_id=<HEAD SHA> \
 **Fix:** <fix>
 
 <why, when there is one>
-
-<sub>Required before merge: fix it, or reply with why it does not apply.</sub>
-<!-- claude-review -->
 ```
 
 When another reviewer already flagged the same defect, add ``(also: `@handle`)`` after the
-problem — backticked so it never pings. A finding flagged `outside` goes on the nearest added line
-of the same file, or, when that file has no added line, on the first added line of the pull
-request, and its body starts with the real location: `On <path>:<line>:`. A reply in an existing
-thread goes to `gh api repos/<REPO>/pulls/<PR>/comments/<comment id>/replies -X POST -f body=<body>`
-and ends with `<!-- claude-review -->` too.
+problem — backticked so it never pings. The workflow appends the line saying the finding is
+required before merge, and the marker that identifies the comment as this workflow's.
 
-### Verdict — one review per run
+### `replies`, `resolve`, `reopen`
 
-Posted after the inline comments, on the head commit:
+- `replies`: `{comment_id, body}`, with the comment's numeric id from the context file.
+- `resolve`: `{thread_id, comment_node_id}` from the context file — the thread to resolve and the
+  comment to hide.
+- `reopen`: `{thread_id}`.
 
-- **Open findings** (`open_findings` > 0):
+### The verdict
 
-  ```
-  gh api repos/<REPO>/pulls/<PR>/reviews -X POST -f commit_id=<HEAD SHA> \
-    -f event=REQUEST_CHANGES -f body=<body>
-  ```
+The workflow posts it from `verdict` and `open_findings`, so it always matches them:
 
-  ```
-  ❌ **Changes requested** — <n> open findings.
+- `changes requested` — a **Request changes** review saying every finding is required.
+- `approved` — first it dismisses this workflow's earlier change requests, then it approves.
+  The approval never counts toward the merge: a code owner still has to approve. Where GitHub
+  does not let this token approve, it posts the same text as a comment-review.
 
-  Every finding is required: each one blocks the merge until it is fixed, or a reply disputes it
-  and the review accepts the reply. Resolve every thread before merging.
-  <!-- claude-review-verdict -->
-  ```
-
-  If GitHub refuses `REQUEST_CHANGES` for this token, post the same body with `event=COMMENT`.
-- **No open findings**: first dismiss every earlier `CHANGES_REQUESTED` review this workflow left
-  (the ones carrying `<!-- claude-review-verdict -->`, from the context file's reviews), with
-  `gh api repos/<REPO>/pulls/<PR>/reviews/<id>/dismissals -X PUT -f event=DISMISS -f message=<msg>`
-  and the message `Every finding is resolved at <sha>.` Then approve:
-
-  ```
-  gh api repos/<REPO>/pulls/<PR>/reviews -X POST -f commit_id=<HEAD SHA> \
-    -f event=APPROVE -f body=<body>
-  ```
-
-  ```
-  ✅ **Approved** — no open findings.
-
-  Every finding was required, and every one is resolved. This approval does not count toward the
-  merge: a code owner still has to approve.
-  <!-- claude-review-verdict -->
-  ```
-
-  If GitHub refuses `APPROVE` for this token, post the same body with `event=COMMENT`.
+`approved` with any open finding, or `changes requested` with none, fails the run.
 
 ### Never
 
-- A summary or conversation comment. If an earlier run left one (it carries
-  `<!-- claude-review-summary -->`), delete it:
-  `gh api repos/<REPO>/issues/comments/<id> -X DELETE`.
-- A verdict that disagrees with `open_findings`, or `APPROVE` while any finding is open.
+- A summary or conversation comment, or anything in `comments` that is not a finding.
 - `'` or `"` between a `{` and its `}` in any body; use backticks there instead.
 
 ## Repo rules
