@@ -81,16 +81,20 @@ jobs:
             echo "head_sha=$(jq -r '.head.sha' <<<"$pr")"
           } >> "$GITHUB_OUTPUT"
 
-  review:
-    name: Review — Claude
+  # Claude reviews, read-only: it can look at the code and the pull request,
+  # and returns the review as structured output. Nothing here writes.
+  analyze:
+    name: Review — Analyze
     needs: gate
     if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
       issues: read
+    outputs:
+      result: ${{ steps.claude.outputs.structured_output }}
     env:
       PR: ${{ needs.gate.outputs.number }}
       BASE_SHA: ${{ needs.gate.outputs.base_sha }}
@@ -128,7 +132,6 @@ jobs:
             fi
           }
           take .github/claude-review/rules.md "$OUT"
-          take .github/claude-review/publish.py "$RUNNER_TEMP/claude-review-publish.py"
 
       # The diff as files, so the lens subagents need nothing but read tools.
       - name: Write the diff files
@@ -375,6 +378,55 @@ jobs:
             exit 1
           fi
 
+  # Writes the review to the pull request. No Claude and no code from the pull
+  # request run here: only publish.py, taken from the base branch. It needs
+  # contents: write because GitHub requires it to resolve a review thread. This
+  # is the check the ruleset requires, so it runs whenever the pull request is
+  # in scope and fails unless the analysis succeeded: a skipped or broken
+  # review never counts as a pass.
+  publish:
+    name: Review — Claude
+    needs: [gate, analyze]
+    if: always() && needs.gate.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      PR: ${{ needs.gate.outputs.number }}
+      BASE_SHA: ${{ needs.gate.outputs.base_sha }}
+      HEAD_SHA: ${{ needs.gate.outputs.head_sha }}
+    steps:
+      - name: Require the analysis to have succeeded
+        if: needs.analyze.result != 'success'
+        shell: bash
+        env:
+          ANALYZE: ${{ needs.analyze.result }}
+        run: |
+          echo "::error::the review analysis did not succeed ($ANALYZE); nothing was published"
+          exit 1
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.gate.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # publish.py from the base branch, like the rules; the diff tells it which
+      # lines a comment may sit on.
+      - name: Take the publisher from the base branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          path=.github/claude-review/publish.py
+          if git cat-file -e "$BASE_SHA:$path" 2>/dev/null; then
+            git show "$BASE_SHA:$path" > "$RUNNER_TEMP/claude-review-publish.py"
+          else
+            git show "$GITHUB_SHA:$path" > "$RUNNER_TEMP/claude-review-publish.py"
+          fi
+          git diff "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/claude-review.diff"
+
       # Posts the review from the structured output: at most one review per
       # run, holding every new inline comment and the verdict, with no finding
       # posted twice and one live verdict. See .github/claude-review/publish.py.
@@ -383,7 +435,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RESULT: ${{ steps.claude.outputs.structured_output }}
+          RESULT: ${{ needs.analyze.outputs.result }}
           DIFF: ${{ runner.temp }}/claude-review.diff
         run: python3 "$RUNNER_TEMP/claude-review-publish.py"
 
