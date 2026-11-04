@@ -15,13 +15,14 @@ locals {
     posthog_plan     = ".github/workflows/_posthog-live-plan.yml"
     posthog_apply    = ".github/workflows/_posthog-live-apply.yml"
     backend_deploy   = ".github/workflows/deploy-stg.yml"
+    backend_cd       = ".github/workflows/backend-cd.yml"
     stg_cd           = ".github/workflows/stg-cd.yml"
     prd_cd           = ".github/workflows/prd-cd.yml"
   }
 
   # job_workflow_ref's path component is owner/repo/path, and the provider
   # mapping has already dropped the @ref suffix.
-  wf = { for k, p in local.workflows : k => "${k == "backend_deploy" ? local.backend_repo : local.platform_repo}/${p}" }
+  wf = { for k, p in local.workflows : k => "${startswith(k, "backend_") ? local.backend_repo : local.platform_repo}/${p}" }
 
   # Plan runs on unreviewed pull-request code, so both entry points are
   # allowed — but only through the shared plan workflow, and only read-only
@@ -80,6 +81,11 @@ locals {
     prd = ["${local.platform_repo}|${local.wf.prd_cd}|prd|refs/heads/dev"]
   }
 
-  # The application repository deploys from its own branch, not from dev.
-  backend_deploy_entries = ["${local.backend_repo}|${local.wf.backend_deploy}|stg|refs/heads/stg"]
+  # The application repository deploys from its own branch, not from dev. Both
+  # names hold while the workflow moves to backend-cd.yml; the old one goes
+  # after the first deploy under the new.
+  backend_deploy_entries = [
+    "${local.backend_repo}|${local.wf.backend_deploy}|stg|refs/heads/stg",
+    "${local.backend_repo}|${local.wf.backend_cd}|backend-stg|refs/heads/stg",
+  ]
 }

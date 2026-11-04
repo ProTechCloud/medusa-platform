@@ -1,0 +1,118 @@
+name: pr-template
+
+# Holds a pull request to its template. `edited` is here because fixing the
+# title or the body is a change this check has to see. No path filter: the
+# check is required, so it has to report on every pull request.
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: pr-template-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  COMMITLINT_VERSION: 21.2.4
+
+jobs:
+  pr-template:
+    name: Quality — PR Template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # Outside the repository, and with the config beside it, because
+      # commitlint resolves the config's `extends` from where the config sits.
+      - name: Lint the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          dir="$RUNNER_TEMP/commitlint"
+          npm install --prefix "$dir" --ignore-scripts --no-audit --no-fund \
+            "@commitlint/cli@$COMMITLINT_VERSION" \
+            "@commitlint/config-conventional@$COMMITLINT_VERSION"
+          cp commitlint.config.mjs "$dir"
+          cd "$dir"
+          printf '%s\n' "$TITLE" | ./node_modules/.bin/commitlint --verbose
+
+      # From the base branch, so a pull request cannot loosen the template it
+      # is held to. Bots write neither the body nor the checklist.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        if: github.event.pull_request.user.type != 'Bot'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Check the body against the template
+        if: github.event.pull_request.user.type != 'Bot'
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          node <<'SCRIPT'
+          const { readFileSync } = require("node:fs");
+
+          // The comments are the template's prompts, so a section holding only
+          // them is empty. A heading inside a code fence is not a section.
+          function sections(text) {
+            const found = new Map();
+            let lines;
+            let fenced = false;
+            for (const line of text.replace(/<!--[\s\S]*?-->/g, "").split(/\r?\n/)) {
+              if (line.trimStart().startsWith("```")) fenced = !fenced;
+              const heading = fenced ? null : line.match(/^##\s+(.+?)\s*$/);
+              if (heading) found.set(heading[1], (lines = []));
+              else if (lines) lines.push(line);
+            }
+            return found;
+          }
+
+          function items(lines) {
+            return lines
+              .map((line) => line.match(/^\s*[-*] \[( |x)\]\s*(.+?)\s*$/i))
+              .filter(Boolean)
+              .map(([, box, text]) => ({ ticked: box !== " ", text }));
+          }
+
+          const template = sections(readFileSync("base/.github/pull_request_template.md", "utf8"));
+          const body = sections(process.env.BODY);
+          const problems = [];
+
+          for (const [name, prompt] of template) {
+            const lines = body.get(name);
+            if (!lines) {
+              problems.push(`"${name}" is missing`);
+              continue;
+            }
+            if (!lines.join("").trim()) {
+              problems.push(`"${name}" is empty`);
+              continue;
+            }
+            const expected = items(prompt);
+            if (expected.length === 0) continue;
+            const written = items(lines);
+            for (const { text } of expected) {
+              if (!written.some((item) => item.text.includes(text))) {
+                problems.push(`"${name}" lost the item: ${text}`);
+              }
+            }
+            for (const { ticked, text } of written) {
+              if (!ticked && !/\bn\/a\b/i.test(text)) {
+                problems.push(`"${name}" has an item neither ticked nor marked n/a: ${text}`);
+              }
+            }
+          }
+
+          for (const problem of problems) console.log(`::error::${problem}`);
+          process.exit(problems.length ? 1 : 0);
+          SCRIPT
