@@ -85,7 +85,7 @@ resource "google_compute_instance" "api" {
   }
 
   # The box is immutable: a cloud-init change replaces it. The new box boots
-  # the bootstrap image, so run deploy-stg in the application repository
+  # the bootstrap image, so run backend-cd in the application repository
   # right after the apply to put the current image back.
   lifecycle {
     replace_triggered_by = [terraform_data.cloud_init]

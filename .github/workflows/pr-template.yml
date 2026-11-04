@@ -24,8 +24,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # The rules come from the base branch, so a pull request cannot loosen
-      # the template or the title rules it is held to.
+      # Use the base branch's validation rules. This workflow and its runtime
+      # remain PR-controlled, so this check is not tamper-resistant.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.event.pull_request.base.sha }}
