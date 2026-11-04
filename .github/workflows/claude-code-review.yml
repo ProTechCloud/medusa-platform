@@ -140,8 +140,10 @@ jobs:
           wc -l "$RUNNER_TEMP"/claude-review*.diff
 
       # One subagent per lens, plus the checker, built from the base-branch
-      # rules and written over anything the pull request put at those paths.
-      # Read-only tools: a subagent can look, never post.
+      # rules. User-level (~/.claude/agents), not the checkout: on a pull
+      # request the action replaces the checkout's .claude/ with the base
+      # branch's, which would delete them. Read-only tools: a subagent can
+      # look, never post.
       - name: Build the review subagents
         shell: python
         env:
@@ -163,10 +165,11 @@ jobs:
           if missing or "Checking" not in sections or "Repo rules" not in sections:
               raise SystemExit(f"rules file is missing sections: {missing}")
 
-          os.makedirs(".claude/agents", exist_ok=True)
+          agents = os.path.expanduser("~/.claude/agents")
+          os.makedirs(agents, exist_ok=True)
 
           def write(name, description, body):
-              with open(f".claude/agents/{name}.md", "w", encoding="utf-8") as out:
+              with open(f"{agents}/{name}.md", "w", encoding="utf-8") as out:
                   out.write(f"---\nname: {name}\ndescription: {description}\n")
                   out.write("tools: Read, Grep, Glob\nmodel: inherit\n---\n\n")
                   out.write(body + "\n")
@@ -200,7 +203,7 @@ jobs:
               "deciding line prefixed `path:line: `, and why in one sentence.\n\n"
               f"# Checking\n\n{sections['Checking']}\n\n{shared}",
           )
-          print(sorted(os.listdir(".claude/agents")))
+          print(agents, sorted(os.listdir(agents)))
 
       # The whole conversation and history, so the review starts knowing what
       # was already said and fixed: every commit with its hash, every review,
@@ -347,9 +350,17 @@ jobs:
           RESULT: ${{ steps.claude.outputs.structured_output }}
         run: |
           set -euo pipefail
-          ran=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]?
-            | select(.type == "tool_use" and (.name == "Agent" or .name == "Task"))
-            | .input.subagent_type] | unique | .[]' "$EXECUTION")
+          # A subagent counts only when its call came back with an answer: a
+          # call that errored, or named an agent that does not exist, did not run.
+          ran=$(jq -r '
+            ([.[] | select(.type == "user") | .message.content[]? | select(.type == "tool_result")
+              | {key: .tool_use_id, value: .}] | from_entries) as $results
+            | [.[] | select(.type == "assistant") | .message.content[]?
+                | select(.type == "tool_use" and (.name == "Agent" or .name == "Task"))
+                | select(($results[.id] // {is_error: true}) as $r
+                    | ($r.is_error != true)
+                    and (($r.content | tostring) | test("Agent type .* not found") | not))
+                | .input.subagent_type] | unique | .[]' "$EXECUTION")
           echo "subagents that ran: $(echo "$ran" | tr '\n' ' ')"
           missing=""
           for lens in security conventions tests boundaries performance correctness intent; do
