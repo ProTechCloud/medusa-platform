@@ -96,6 +96,7 @@ jobs:
       issues: read
     outputs:
       result: ${{ steps.claude.outputs.structured_output }}
+      decisions: ${{ steps.reconcile.outputs.structured_output }}
     env:
       PR: ${{ needs.gate.outputs.number }}
       BASE_SHA: ${{ needs.gate.outputs.base_sha }}
@@ -133,6 +134,7 @@ jobs:
             fi
           }
           take .github/claude-review/rules.md "$OUT"
+          take .github/claude-review/reconcile.md "$RUNNER_TEMP/claude-review-reconcile.md"
 
       # The diff as files, so the lens subagents need nothing but read tools.
       - name: Write the diff files
@@ -329,6 +331,84 @@ jobs:
             exit 1
           fi
 
+      # The reconcile step's inputs: the review's findings, numbered, and every
+      # thread this workflow opened, with all its replies and who resolved it.
+      - name: Prepare the reconcile inputs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          jq '[.findings | to_entries[] | {index: .key} + .value]' <<<"$RESULT" \
+            > "$RUNNER_TEMP/claude-review-findings.json"
+          # shellcheck disable=SC2016 # GraphQL variables, not shell ones
+          gh api graphql --paginate --slurp -F owner="${GITHUB_REPOSITORY%/*}" \
+            -F name="${GITHUB_REPOSITORY#*/}" -F number="$PR" -f query='
+            query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+              repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+                reviewThreads(first: 50, after: $endCursor) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { id isResolved resolvedBy { login } path line originalLine
+                    comments(first: 100) { nodes { author { login } createdAt body } } } } } } }' \
+            | jq '[.[].data.repository.pullRequest.reviewThreads.nodes[]
+                | select((.comments.nodes[0].author.login | IN("github-actions", "github-actions[bot]"))
+                    and (.comments.nodes[0].body | contains("<!-- claude-review -->")))
+                | {thread: .id, resolved: .isResolved, resolved_by: .resolvedBy.login,
+                   path, line: (.line // .originalLine),
+                   finding: .comments.nodes[0].body,
+                   replies: [.comments.nodes[1:][] | {author: .author.login, at: .createdAt, body}]}]' \
+            > "$RUNNER_TEMP/claude-review-threads.json"
+          echo "findings: $(jq length "$RUNNER_TEMP/claude-review-findings.json")," \
+            "threads: $(jq length "$RUNNER_TEMP/claude-review-threads.json")"
+
+      # A separate Claude call that never reviews code: it lines the blind
+      # review up with the existing threads by meaning, and decides each
+      # thread's action. publish.py carries it out under its own rules.
+      - uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1
+        id: reconcile
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ env.PR }}
+            HEAD SHA: ${{ env.HEAD_SHA }}
+            INSTRUCTIONS FILE: ${{ runner.temp }}/claude-review-reconcile.md
+            FINDINGS FILE: ${{ runner.temp }}/claude-review-findings.json
+            THREADS FILE: ${{ runner.temp }}/claude-review-threads.json
+
+            Read the instructions file and follow it exactly. You do not
+            review the code: you match the findings to the threads, decide
+            each thread's action, and answer with the structured output.
+          claude_args: |
+            --model claude-sonnet-5-5
+            --max-turns 40
+            --add-dir ${{ runner.temp }}
+            --json-schema '{"type": "object",
+              "properties": {
+                "matches": {"type": "array", "items": {"type": "object",
+                  "properties": {"finding": {"type": "integer"}, "thread": {"type": "string"}},
+                  "required": ["finding", "thread"]}},
+                "threads": {"type": "array", "items": {"type": "object",
+                  "properties": {"thread": {"type": "string"},
+                    "action": {"type": "string", "enum": ["keep", "resolve", "reopen"]},
+                    "reply": {"type": "string"}},
+                  "required": ["thread", "action", "reply"]}}},
+              "required": ["matches", "threads"]}'
+            --allowedTools
+              "Read,Grep,Glob"
+              "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+
+      - name: Keep the reconcile transcript
+        if: always() && steps.reconcile.outputs.execution_file != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: claude-reconcile-transcript-pr${{ env.PR }}-${{ github.run_attempt }}
+          path: ${{ steps.reconcile.outputs.execution_file }}
+          retention-days: 3
+          if-no-files-found: warn
+
   # Writes the review to the pull request. No Claude and no code from the pull
   # request run here: only publish.py, taken from the base branch. It needs
   # contents: write because GitHub requires it to resolve a review thread. This
@@ -378,15 +458,16 @@ jobs:
           fi
           git diff "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/claude-review.diff"
 
-      # Posts the review from the structured output: at most one review per
-      # run, holding every new inline comment and the verdict, with no finding
-      # posted twice and one live verdict. See .github/claude-review/publish.py.
+      # Carries out the reconciled review: the reconcile step's thread actions
+      # and replies, then every unmatched finding in one review with the
+      # verdict. See .github/claude-review/publish.py for the rules it holds.
       - name: Publish the review
         id: publish
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.analyze.outputs.result }}
+          DECISIONS: ${{ needs.analyze.outputs.decisions }}
           DIFF: ${{ runner.temp }}/claude-review.diff
         run: python3 "$RUNNER_TEMP/claude-review-publish.py"
 

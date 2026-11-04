@@ -14,8 +14,8 @@ resolved.
    earlier review comments, threads or replies, and you never decide what to post, keep or
    resolve. Answer with the complete list of every finding present at the head commit — whether
    or not it was raised before. The same code gives the same findings.
-2. **Reconcile — the workflow, without you.** It matches your list against the threads this
-   workflow already has open: a finding already open stays as it is, a new one is posted, one that
+2. **Reconcile — a separate step, without you.** It matches your list against the threads this
+   workflow already has, by meaning: a finding already open stays as it is, a new one is posted, one that
    was resolved and is back is reopened, and an open thread your list no longer contains is
    resolved. Then it posts the verdict.
 
@@ -250,22 +250,23 @@ Never put in `findings` anything that is not a defect at the head commit: no sum
 no note about an earlier review. Never put `'` or `"` between a `{` and its `}` in a body; use
 backticks there instead.
 
-## Reconciling — what the workflow does with your findings
+## Reconciling — what happens after you
 
-Shown so you know what your answer drives; you do none of it.
+Shown so you know what your answer drives; you do none of it. A separate step, which never
+reviews code, matches your findings to this workflow's existing threads by meaning — the same
+defect, however worded or wherever it moved — and decides each thread's action
+(`.github/claude-review/reconcile.md`). `publish.py` carries it out:
 
-- A finding matches one of this workflow's threads when it is on the same file, within 3 lines of
-  the thread's line (or of the real line a moved comment names), and shares a lens with it.
-- Matches an **open** thread: kept as it is, never posted again.
-- Matches a thread this workflow **resolved**: the defect is back, so the thread is reopened.
-- Matches a thread **a person resolved**: left resolved — a person judged it, and that stands.
-- Matches nothing: posted, all new comments in one review.
-- An **open** thread of this workflow that no finding matches: the defect is gone, so the thread
-  is resolved.
-- The verdict follows the threads: changes are requested while any thread of this workflow is
-  open, and approved — after its earlier requests for changes are dismissed — when none is. An
-  unchanged request for changes is edited in place; an older verdict is dismissed and collapsed
-  when a new one is posted.
+- a finding matching an **open** thread: kept, never posted again;
+- matching a thread this workflow **resolved**: the defect is back, the thread is reopened;
+- matching a thread **a person resolved**: left resolved;
+- matching nothing: posted, all new comments in one review;
+- an **open** thread no finding matches: the defect is gone, the thread is resolved;
+- a person's reply disputing an open finding is judged against the code: accepted and resolved,
+  or answered once with the line that shows the defect.
+
+The verdict follows the threads: changes are requested while any thread of this workflow is open,
+and approved — after its earlier requests for changes are dismissed — when none is.
 
 ## Repo rules
 
