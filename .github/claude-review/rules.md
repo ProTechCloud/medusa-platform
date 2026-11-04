@@ -264,14 +264,20 @@ required before merge, and the marker that identifies the comment as this workfl
 
 ### The verdict
 
-The workflow posts it from `verdict` and `open_findings`, so it always matches them:
+The workflow decides it from the pull request itself, not from your answer: changes are requested
+while any thread from this workflow is unresolved, counting the ones you just raised. Each run
+leaves at most one new review, holding every new comment and the verdict; an unchanged request
+for changes is edited in place; an older verdict is dismissed and collapsed when a new one is
+posted. A finding an open thread already makes within 3 lines is not posted again, and a finding
+on a line the diff does not carry moves to the nearest line it does.
 
-- `changes requested` — a **Request changes** review saying every finding is required.
-- `approved` — first it dismisses this workflow's earlier change requests, then it approves.
-  The approval never counts toward the merge: a code owner still has to approve. Where GitHub
-  does not let this token approve, it posts the same text as a comment-review.
+- Open threads — a **Request changes** review saying every finding is required.
+- None — it dismisses the earlier change requests and approves. The approval never counts toward
+  the merge: a code owner still has to approve. Where GitHub does not let this token approve, the
+  same text is posted as a comment-review.
 
-`approved` with any open finding, or `changes requested` with none, fails the run.
+So an old finding you leave out of `resolve` stays open and keeps blocking: list every one whose
+defect is gone.
 
 ### Never
 
