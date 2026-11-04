@@ -26,11 +26,11 @@ permissions:
 
 jobs:
   # Decides whether the pull request is reviewed at all. Forks and drafts never
-  # are. On a push, the author must be an organisation member; a private
-  # member's association can read CONTRIBUTOR, so that one is accepted only
-  # with write access to the repository. Outside collaborators are not
-  # reviewed. A manual run skips the author check: whoever ran it has write
-  # access already.
+  # are. On a push, the author needs write access to the repository. The
+  # association alone cannot decide it: this token cannot see private
+  # organisation membership, so a private member reads as COLLABORATOR or
+  # CONTRIBUTOR. Bots and anyone without write access are not reviewed. A
+  # manual run skips the author check: whoever ran it has write access already.
   gate:
     name: Review — Gate
     if: vars.CLAUDE_REVIEW_ENABLED == 'true'
@@ -68,10 +68,7 @@ jobs:
             if [ "$EVENT" = workflow_dispatch ]; then
               allowed=true
             else
-              case "$assoc" in
-                OWNER | MEMBER) allowed=true ;;
-                CONTRIBUTOR) case "$perm" in admin | maintain | write) allowed=true ;; esac ;;
-              esac
+              case "$perm" in admin | maintain | write) allowed=true ;; esac
             fi
           fi
 
