@@ -14,7 +14,6 @@ locals {
     cloudflare_apply = ".github/workflows/_cloudflare-live-apply.yml"
     posthog_plan     = ".github/workflows/_posthog-live-plan.yml"
     posthog_apply    = ".github/workflows/_posthog-live-apply.yml"
-    backend_deploy   = ".github/workflows/deploy-stg.yml"
     backend_cd       = ".github/workflows/backend-cd.yml"
     stg_cd           = ".github/workflows/stg-cd.yml"
     prd_cd           = ".github/workflows/prd-cd.yml"
@@ -81,11 +80,6 @@ locals {
     prd = ["${local.platform_repo}|${local.wf.prd_cd}|prd|refs/heads/dev"]
   }
 
-  # The application repository deploys from its own branch, not from dev. Both
-  # names hold while the workflow moves to backend-cd.yml; the old one goes
-  # after the first deploy under the new.
-  backend_deploy_entries = [
-    "${local.backend_repo}|${local.wf.backend_deploy}|stg|refs/heads/stg",
-    "${local.backend_repo}|${local.wf.backend_cd}|backend-stg|refs/heads/stg",
-  ]
+  # The application repository deploys from its own branch, not from dev.
+  backend_deploy_entries = ["${local.backend_repo}|${local.wf.backend_cd}|backend-stg|refs/heads/stg"]
 }

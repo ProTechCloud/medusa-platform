@@ -63,7 +63,7 @@ match of the whole string — there is no wildcard anywhere.
 |---|---|
 | plan hub | this repo · the shared plan workflow · a PR or `dev` |
 | apply hub | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
-| backend deploy hub | the app repo · `backend-cd.yml` · `backend-stg` environment · `refs/heads/stg`; `deploy-stg.yml` · `stg` environment stays until the first deploy under the new name |
+| backend deploy hub | the app repo · `backend-cd.yml` · `backend-stg` environment · `refs/heads/stg` |
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
@@ -367,7 +367,7 @@ the script never stops the start. It writes the fixed values, then adds the toke
 Secret Manager answered within ten seconds with a value that is neither empty nor
 `REPLACE_ME_VIA_SECRET_MANAGER`; otherwise it logs one line saying the token is absent.
 Because the file is rewritten before every start, a restart picks up a new token version;
-`deploy-stg` in `medusa-app` restarts the app.
+`backend-cd` in `medusa-app` restarts the app.
 
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
