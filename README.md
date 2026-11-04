@@ -63,7 +63,7 @@ match of the whole string — there is no wildcard anywhere.
 |---|---|
 | plan hub | this repo · the shared plan workflow · a PR or `dev` |
 | apply hub | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
-| backend deploy hub | the app repo · its deploy workflow · `stg` environment · `refs/heads/stg` |
+| backend deploy hub | the app repo · `backend-cd.yml` · `backend-stg` environment · `refs/heads/stg`; `deploy-stg.yml` · `stg` environment stays until the first deploy under the new name |
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 

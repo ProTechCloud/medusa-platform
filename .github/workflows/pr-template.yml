@@ -15,9 +15,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  COMMITLINT_VERSION: 21.2.4
-
 jobs:
   pr-template:
     name: Quality — PR Template
@@ -45,17 +42,14 @@ jobs:
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
+          # First merge only: the base branch has neither file yet.
+          root=base
+          [ -f base/commitlint.config.mjs ] || root=.
           dir="$RUNNER_TEMP/commitlint"
-          npm install --prefix "$dir" --ignore-scripts --no-audit --no-fund \
-            "@commitlint/cli@$COMMITLINT_VERSION" \
-            "@commitlint/config-conventional@$COMMITLINT_VERSION"
-          if [ -f base/commitlint.config.mjs ]; then
-            cp base/commitlint.config.mjs "$dir"
-          else
-            # First merge only: the base branch has no config yet.
-            cp commitlint.config.mjs "$dir"
-          fi
+          mkdir -p "$dir"
+          cp "$root/commitlint.config.mjs" "$root"/.github/pr-template/package*.json "$dir"
           cd "$dir"
+          npm ci --ignore-scripts --no-audit --no-fund
           printf '%s\n' "$TITLE" | ./node_modules/.bin/commitlint --verbose
 
       # Bots write neither the body nor the checklist.
@@ -68,9 +62,9 @@ jobs:
           const { readFileSync } = require("node:fs");
 
           // The comments are the template's prompts, so a section holding only
-          // them is empty. Inside a code fence, a heading is not a section and
-          // a checkbox is not an item; a fence closes only on its own character,
-          // at its length or longer.
+          // them is empty, and so is one holding only an empty code fence. Inside
+          // a fence, a heading is not a section and a checkbox is not an item; a
+          // fence closes only on its own character, at its length or longer.
           function sections(text) {
             const found = new Map();
             let section;
@@ -88,7 +82,7 @@ jobs:
               if (heading) {
                 section = { text: "", items: [] };
                 found.set(heading[1], section);
-              } else if (section) {
+              } else if (section && !marker) {
                 section.text += line;
                 const item = fenced ? null : line.match(/^\s*[-*] \[( |x)\]\s*(.+?)\s*$/i);
                 if (item) section.items.push({ ticked: item[1] !== " ", text: item[2] });
