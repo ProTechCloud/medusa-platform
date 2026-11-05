@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       stack:
-        description: org, stg, prd or member-access. A label and a concurrency key, and the environment for a root that declares one.
+        description: org, stg, prd or member-access. A label, a concurrency key and the environment of a root.
         required: true
         type: string
       gh_environment:
