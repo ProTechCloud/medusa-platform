@@ -4,15 +4,15 @@
 # existing proves nothing about this run, so this also refuses an environment an
 # administrator can bypass, and a run nobody approved.
 set -euo pipefail
-environment=$(gh api "repos/$REPO/environments/$ENVIRONMENT")
+settings=$(gh api "repos/$REPO/environments/$ENVIRONMENT")
 
-bars_self_review=$(jq '[.protection_rules[]? | select(.type == "required_reviewers" and .prevent_self_review == true)] | length' <<< "$environment")
+bars_self_review=$(jq '[.protection_rules[]? | select(.type == "required_reviewers" and .prevent_self_review == true)] | length' <<< "$settings")
 if [ "$bars_self_review" -eq 0 ]; then
   echo "::error::$ENVIRONMENT must have a required reviewer rule that bars self-review. Nothing was applied."
   exit 1
 fi
 
-if [ "$(jq -r '.can_admins_bypass' <<< "$environment")" != "false" ]; then
+if [ "$(jq -r '.can_admins_bypass' <<< "$settings")" != "false" ]; then
   echo "::error::$ENVIRONMENT must not let administrators bypass its rules. Nothing was applied."
   exit 1
 fi
