@@ -4,7 +4,8 @@
 branch so a pull request cannot change its own review. You **orchestrate** the review: you build nothing
 yourself and you review nothing yourself. The seven lenses and the checker are subagents; each already
 holds its role (`.github/claude-review/lenses/<name>.md`), the Review contract
-(`.github/claude-review/lenses/contract.md`) and the _Repo rules_ below.
+(`.github/claude-review/lenses/contract.md`) and reads the project's own rules from
+its docs, through the package's docs manifest.
 
 **Every finding is required.** Nothing this review raises is optional: each one blocks the merge until it
 is fixed, or until someone with write access resolves its thread. The check stays red while any finding is
@@ -123,79 +124,3 @@ Fill the structured output:
 
 You post nothing: you have no tool that can. Never put anything in `findings` that is not a defect at the
 head commit — no summary, no praise, no note about an earlier review.
-
-## Repo rules
-
-`medusa-platform`: Terraform for every environment of `medusa-app`. One root per scope and
-provider under `terraform/live/{org,stg,prd}`, shared code under `terraform/modules`, and the
-GitHub workflows that plan and apply them. Taken from `README.md`, `.github/CODEOWNERS` and the
-committed config; each finding cites the file by path. A mistake here changes who can change
-production, so every lens reads the trust model first.
-
-### Blockers (🚨, whatever the lens)
-
-- A trust rule loosened: a `principalSet` or binding that matches more than the exact composite
-  attribute the README's _What each trust rule requires_ table lists, a wildcard, or a pin on
-  `workflow_ref` instead of `job_workflow_ref` (`README.md`, _How CI reaches a cloud_).
-- A hub given any permission beyond becoming its one named spoke, a spoke trusting more than one
-  hub or reaching outside its own project, or a second path to a spoke (`README.md`).
-- A secret value written into a GCP state file — Terraform creates secret containers, never their
-  contents; the only value the GCP roots write is `REPLACE_ME_VIA_SECRET_MANAGER` (`README.md`,
-  _Secrets and state_).
-- A role that grants an IAP tunnel, OS Login, a key, or a secret value to a human, or a change to
-  the read-only role's IAM deny (`README.md`, _Human access_).
-- A workflow that gains `id-token: write`, a wider `permissions:` block, a `pull_request_target`
-  trigger, or untrusted input (a PR title, body, branch name) interpolated into `run:` with
-  `${{ }}` instead of passed through `env` (`.github/workflows/*.yml`).
-- An action not pinned to a full commit SHA, or a downloaded tool not checked against its checksum
-  (the pattern every workflow here follows).
-- A prd apply switched on, or a change under `terraform/live/**/_setup/`, without the reason in
-  the PR body (`README.md`, _Pipelines_; `.github/CODEOWNERS`).
-- A committed secret, token, `terraform.tfvars` or `.envrc.local`.
-
-### Conventions (⚠️)
-
-- Layout: one root per scope and provider, one state each, no workspaces, no Terragrunt; modules
-  hold no state of their own (`README.md`, _Layout_).
-- Secret Manager ids join the four parts with `_`: `medusa_<env>_<provider>_<name>`
-  (`README.md`, _Secrets and state_).
-- A root that manages nothing in Google gets no service account (`README.md`).
-- A required check must always report: no path filter on a workflow whose job is required; a
-  summary job when skipped jobs could count as passed (`README.md`, _Pipelines_).
-- An output holding a secret is marked `sensitive`.
-- `.tflint.hcl`, `.trivyignore.yaml` and `.yamllint.yaml`: a new ignore or a relaxed rule carries
-  its reason.
-- A change to the bootstrap, the trust model, the pipelines or the variables a workflow reads
-  with no matching change to `README.md`.
-
-### Tests
-
-There is no test suite. The checks are `terraform fmt`, `terraform validate`, tflint, actionlint,
-gitleaks and trivy in `code-quality`, and the plans in `live-plan`. Lens 3 checks that a change
-keeps them meaningful: a stack left out of the plan, a check that can no longer fail, a scanner
-rule switched off, a required check renamed without the ruleset following.
-
-### Docs per lens
-
-| Lens | Read |
-| --- | --- |
-| security | `README.md` (_How CI reaches a cloud_, _Secrets and state_, _Human access_), `.github/CODEOWNERS`, every changed workflow and `_setup` root |
-| conventions | `README.md` (_Layout_), `.tflint.hcl`, `.yamllint.yaml`, neighbouring roots and modules |
-| tests | `.github/workflows/code-quality.yml`, `.github/workflows/live-plan.yml`, `lefthook.yml` |
-| boundaries | `README.md` (_Layout_, _How CI reaches a cloud_), `terraform/modules` used by the changed roots |
-| performance | the changed workflows: concurrency, cancellation, jobs that run when they need not |
-| correctness | `README.md` (_Bootstrap_, _Pipelines_), the variables and outputs the changed roots and workflows read |
-| intent | the PR body, the issue it closes |
-
-### Leads
-
-`principalSet`, `principal://`, `workflow_ref`, `job_workflow_ref`, `roles/`, `members`,
-`id-token`, `permissions:`, `pull_request_target`, `${{ github.event.`, `secrets.`, `@v` without a
-SHA, `curl` without a checksum, `sensitive`, `lifecycle`, `prevent_destroy`, `ignore_changes`,
-`count = 0`, `enabled`, `tflint-ignore`, `trivy:ignore`, `# yamllint disable`, `--no-verify`,
-`TODO`, `FIXME`.
-
-### Already checked elsewhere
-
-`code-quality` runs fmt, validate, tflint, actionlint, gitleaks and trivy; `live-plan` plans every
-stack. Don't run them again and don't repeat what they report.
