@@ -27,7 +27,6 @@ concurrency:
 permissions:
   contents: read
   id-token: write
-  actions: read
 
 jobs:
   org:
@@ -37,6 +36,10 @@ jobs:
       stack: org
       gh_environment: setup
       root: terraform/live/org/gcp/_setup
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
 
   stg:
     name: apply stg setup
@@ -47,6 +50,10 @@ jobs:
       gh_environment: setup
       root: terraform/live/stg/gcp/_setup
       project_id: ${{ vars.GCP_PROJECT_STG }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
 
   prd:
     name: apply prd setup
@@ -57,3 +64,7 @@ jobs:
       gh_environment: setup
       root: terraform/live/prd/gcp/_setup
       project_id: ${{ vars.GCP_PROJECT_PRD }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read

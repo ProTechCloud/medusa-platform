@@ -31,7 +31,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  actions: read
 
 env:
   TERRAFORM_VERSION: 1.16.6
@@ -40,6 +39,10 @@ jobs:
   apply:
     name: apply
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
 
     environment:
       name: ${{ inputs.gh_environment }}

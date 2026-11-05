@@ -38,7 +38,9 @@ GitHub OIDC ──▶ identity pool ──▶ HUB ──tokenCreator──▶ SP
 ```
 
 The hub is the entry point and holds nothing, except that a plan hub may create its plan
-under its own prefix in the plan store. The spoke lives inside the environment it
+under its own prefix in the plan store. An environment's apply spoke may also set who becomes
+that environment's deploy and tunnel-token hubs, and its plan spoke may read them, so renaming
+a deploy is an ordinary apply of the workload root. The spoke lives inside the environment it
 changes and trusts exactly one hub, set authoritatively — a second path to it cannot be
 added without showing as a diff here.
 
@@ -241,8 +243,8 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `BACKEND_REPOSITORY` | `backend_repository` in the same file |
 | `LIFT_DOMAIN_RULE` | `true` only if the organization sets `iam.allowedPolicyMemberDomains`. Unset otherwise |
 
-Four secrets — two Cloudflare and two PostHog, because neither API has workload identity
-federation. The Cloudflare plan token comes from `org/cloudflare/_setup` and is copied in
+Six secrets: two Cloudflare and two PostHog, because neither API has workload identity
+federation, and two for the member list. The Cloudflare plan token comes from `org/cloudflare/_setup` and is copied in
 once with `terraform output -raw`; the mint token is made by hand, for the reason below.
 The PostHog keys are made by hand too: see step 6.
 
@@ -285,8 +287,10 @@ it lives with the person who applies that root. Narrow surface, not low privileg
 says such a token "can create tokens with access to any of a user's resources", so
 rotating it is the lever to pull if anything leaks.
 
-GitHub **environments** `stg`, `prd`, `cloudflare-org` and `posthog-org` must exist; their
-names are part of the trust rules, not labels. Each accepts deployments from `dev` only.
+GitHub **environments** `stg`, `prd`, `cloudflare-org`, `posthog-org`, `setup` and
+`organization-member-access` must exist; their names are part of the trust rules, not labels.
+Each accepts deployments from `dev` only. `setup` and `organization-member-access` also need a
+required reviewer that bars self-review, because `_setup-apply.yml` refuses to run without one.
 
 ### 5. Fill in the secret values
 
@@ -426,7 +430,7 @@ Two roles, and nobody gets a shell:
 | Role | Who | What it allows |
 |---|---|---|
 | read-only | the developer group | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
-| administration | one named person | full access on `stg` and `prd`, for what CI cannot do |
+| administration | one named person, and whoever the member list gives the `administration` profile | full access on `stg` and `prd`, for what CI cannot do, including reading a secret value |
 
 With read-only, stopping an instance, changing anything, or reading a secret value is
 refused. Membership is managed in the Google Group, so adding or removing a developer is
@@ -438,9 +442,13 @@ token secrets because it needs them to start. Any human shell would therefore re
 value, whatever the deny policy says, because the caller on that path is the VM and not the
 person.
 
-The administration role is one account and not a group, so every change made outside CI
-has exactly one owner. It sits outside the deny policy — it is the role for the cases
+The administration role goes to named accounts and never to a group, so every change made
+outside CI has an owner. It sits outside the deny policy — it is the role for the cases
 nobody listed in advance.
+
+The deny policy lives in `org/organization-member-access/gcp`, so only an approved run of
+`organization-member-access-cd` changes or re-asserts it. `org/gcp/_setup` still grants the
+group its read-only role.
 
 ### The member list
 

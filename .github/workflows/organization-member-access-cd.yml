@@ -9,7 +9,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  actions: read
 
 jobs:
   gcp:
@@ -21,6 +20,10 @@ jobs:
       root: terraform/live/org/organization-member-access/gcp
     secrets:
       ORG_MEMBERS_ACCESS: ${{ secrets.ORG_MEMBERS_ACCESS }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
 
   posthog:
     name: apply member access posthog
@@ -37,3 +40,6 @@ jobs:
       POSTHOG_APPLY_API_KEY: ${{ secrets.POSTHOG_APPLY_API_KEY }}
       ORG_MEMBERS_ACCESS: ${{ secrets.ORG_MEMBERS_ACCESS }}
       POSTHOG_OWNER_EMAIL: ${{ secrets.POSTHOG_OWNER_EMAIL }}
+    permissions:
+      contents: read
+      id-token: write

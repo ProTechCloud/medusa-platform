@@ -10,8 +10,8 @@ locals {
 # a shared one, so its job_workflow_ref names that file. One hub per environment:
 # a shared hub would let a stg deploy overwrite production's tunnel secret.
 #
-# prd names a workflow that does not exist yet: prd is planned and never applied,
-# so nothing matches this entry today.
+# No job runs directly in prd-cd.yml yet, and prd is planned and never applied,
+# so nothing matches this entry today. A job added there would match it.
 resource "google_service_account_iam_binding" "tunnel_token_hub" {
   service_account_id = local.setup.tunnel_token_hub_name
   role               = "roles/iam.workloadIdentityUser"

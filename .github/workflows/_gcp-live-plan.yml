@@ -80,7 +80,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PATTERN: ^(${{ inputs.root }}/|terraform/modules/)
+          PATTERN: ^(${{ inputs.root }}/|terraform/modules/|\.github/scripts/terraform/)
         run: .github/scripts/pull-request/stack-touched.sh
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
