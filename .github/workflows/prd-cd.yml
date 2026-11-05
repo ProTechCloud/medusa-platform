@@ -3,7 +3,8 @@ name: prd-cd
 # Triggered on every push so the workflow is visible and its wiring stays
 # exercised by review, with each apply behind a switch. prd is planned on every
 # pull request and applied only when someone decides to — a problem shows up
-# early, a change does not happen by merging.
+# early, a change does not happen by merging. prd/gcp/_setup is the exception:
+# setup-cd applies it behind a reviewer, because it holds identities and access.
 #
 # The switch is the repository variable TF_APPLY_ENABLE_PRD. Unset, the jobs
 # report as skipped; turning prd on is then a setting someone changes
