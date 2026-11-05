@@ -71,6 +71,10 @@ match of the whole string — there is no wildcard anywhere.
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
+The backend deploy hub and the tunnel-token hubs keep their rules in the environment's
+workload root, in `trust.tf`, so renaming a deploy workflow is one ordinary apply there. The
+other rules stay in `org/gcp/_setup`.
+
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
 which any pull request may add; pinning it would pin nothing.
 

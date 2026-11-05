@@ -39,3 +39,25 @@ output "instance_service_account" {
   description = "Identity the VM runs as. Created here so the apply spoke never needs serviceAccountAdmin."
   value       = google_service_account.instance.email
 }
+
+output "workload_identity_pool" {
+  description = "Passed through from org/gcp/_setup: the workload root reads only this root's outputs."
+  value       = local.org.workload_identity_pool
+}
+
+output "platform_repository" {
+  value = local.org.platform_repository
+}
+
+output "backend_repository" {
+  value = local.org.backend_repository
+}
+
+output "tunnel_token_hub_name" {
+  value = local.org.tunnel_token_hub_names[var.environment]
+}
+
+output "backend_deploy_hub_name" {
+  description = "Empty outside stg."
+  value       = var.environment == "stg" ? local.org.backend_deploy_hub_name : null
+}
