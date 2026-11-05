@@ -16,6 +16,7 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  actions: read
 
 jobs:
   gcp:
@@ -35,6 +36,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
 
   # Runs beside the GCP apply, not after it. The two touch different systems
   # and neither reads the other's output during the run.

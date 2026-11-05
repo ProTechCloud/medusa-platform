@@ -31,6 +31,14 @@ on:
         description: Plan hub to impersonate. Read-only, and denied secret values.
         required: true
         type: string
+      plan_store_bucket:
+        description: Bucket the full plan is uploaded to.
+        required: true
+        type: string
+      plan_store_prefix:
+        description: Prefix this stack may create objects under.
+        required: true
+        type: string
       workload_identity_provider:
         required: true
         type: string
@@ -117,11 +125,21 @@ jobs:
       # The plan text travels as an artifact, not as a comment. Naming it
       # after the stack is what lets the aggregator label each section and
       # tell a stack that was skipped from one that failed.
+      - name: Put the full plan in the plan store
+        if: steps.scope.outputs.relevant == 'true'
+        working-directory: ${{ inputs.root }}
+        env:
+          BUCKET: ${{ inputs.plan_store_bucket }}
+          PREFIX: ${{ inputs.plan_store_prefix }}
+        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/plan-store-upload.sh"
+
       - name: Upload the plan
         if: steps.scope.outputs.relevant == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: plan-gcp-${{ inputs.environment }}
-          path: ${{ inputs.root }}/plan.txt
+          path: |
+            ${{ inputs.root }}/plan.txt
+            ${{ inputs.root }}/plan-url.txt
           retention-days: 5
           if-no-files-found: error
