@@ -80,6 +80,10 @@ match of the whole string — there is no wildcard anywhere.
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
+The backend deploy hub's rule and the tunnel-token hubs' rules are not codified right now:
+their members stay on the hubs in GCP, with nothing managing them, until each environment's
+workload root takes them over.
+
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
 which any pull request may add; pinning it would pin nothing.
 

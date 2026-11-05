@@ -46,18 +46,21 @@ output "workload_identity_pool" {
 }
 
 output "platform_repository" {
-  value = local.org.platform_repository
+  description = "owner/name of this repository, for the trust rules on this environment's hubs."
+  value       = local.org.platform_repository
 }
 
 output "backend_repository" {
-  value = local.org.backend_repository
+  description = "owner/name of the application repository, for the deploy hub's trust rule."
+  value       = local.org.backend_repository
 }
 
 output "tunnel_token_hub_name" {
-  value = local.org.tunnel_token_hub_names[var.environment]
+  description = "Full resource name of this environment's tunnel-token hub."
+  value       = local.org.tunnel_token_hub_names[var.environment]
 }
 
 output "backend_deploy_hub_name" {
-  description = "Empty outside stg."
+  description = "Full resource name of the backend deploy hub. Empty outside stg."
   value       = var.environment == "stg" ? local.org.backend_deploy_hub_name : null
 }

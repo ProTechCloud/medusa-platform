@@ -39,9 +39,10 @@ jobs:
       id-token: write
       actions: read
 
+    # No `deployment: false`, unlike the other applies: this job runs as owner on
+    # the management project, and its only gate is the environment's reviewer.
     environment:
       name: ${{ inputs.gh_environment }}
-      deployment: false
 
     concurrency:
       group: apply-setup-${{ inputs.stack }}

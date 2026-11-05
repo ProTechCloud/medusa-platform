@@ -11,12 +11,20 @@ for id in $stale; do
   gh run cancel "$id" --repo "$REPO" || true
 done
 
-sleep 20
-
+# Each run gets until the deadline to stop by itself, and only what is still alive
+# after that is forced.
+deadline=$((SECONDS + 20))
 for id in $stale; do
-  state=$(gh run view "$id" --repo "$REPO" --json status --jq .status 2>/dev/null || echo gone)
-  if [ "$state" = "in_progress" ] || [ "$state" = "queued" ]; then
-    echo "still alive, forcing $id"
-    gh api -X POST "repos/$REPO/actions/runs/$id/force-cancel" || true
-  fi
+  while :; do
+    state=$(gh run view "$id" --repo "$REPO" --json status --jq .status 2>/dev/null || echo gone)
+    if [ "$state" != "in_progress" ] && [ "$state" != "queued" ]; then
+      continue 2
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      break
+    fi
+    sleep 3
+  done
+  echo "still alive, forcing $id"
+  gh api -X POST "repos/$REPO/actions/runs/$id/force-cancel" || true
 done
