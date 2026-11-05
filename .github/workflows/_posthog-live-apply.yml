@@ -22,6 +22,11 @@ on:
       audience:
         required: true
         type: string
+      requires_reviewer:
+        description: Whether to refuse an environment with no reviewer that bars self-review.
+        required: false
+        type: boolean
+        default: false
       writes_project_token:
         description: Whether this root holds the project token stg's secret needs.
         required: false
@@ -51,6 +56,10 @@ jobs:
   apply:
     name: apply
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
 
     environment:
       name: ${{ inputs.gh_environment }}
@@ -64,6 +73,14 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+
+      - name: Require a reviewer on the environment
+        if: inputs.requires_reviewer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ENVIRONMENT: ${{ inputs.gh_environment }}
+        run: .github/scripts/terraform/require-environment-reviewer.sh
 
       # No minting: PostHog has no API to issue a key per run. The apply key
       # lives only in the posthog-org environment, so pull-request code never

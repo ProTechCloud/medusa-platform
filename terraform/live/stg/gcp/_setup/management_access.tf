@@ -44,3 +44,18 @@ resource "google_kms_crypto_key_iam_member" "spokes_decrypt_management" {
   role          = "roles/cloudkms.cryptoKeyDecrypter"
   member        = "serviceAccount:${each.value}"
 }
+
+# The full plan for the pull-request comment, under this environment's prefix.
+# Create-only: pull-request code reaches this identity, and it must not be able to
+# read another stack's plan or replace one a reviewer is reading.
+resource "google_storage_bucket_iam_member" "plan_writes_plan_store" {
+  bucket = local.org.plan_store_bucket
+  role   = "roles/storage.objectCreator"
+  member = module.plan_spoke.member
+
+  condition {
+    title       = "only this environment's plans"
+    description = "Create objects under ${var.environment}/gcp/ and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${local.org.plan_store_bucket}/objects/${var.environment}/gcp/')"
+  }
+}

@@ -35,6 +35,7 @@ jobs:
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
       workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
       audience: ${{ vars.GCP_WIF_AUDIENCE }}
+      requires_reviewer: true
       writes_project_token: false
     secrets:
       POSTHOG_APPLY_API_KEY: ${{ secrets.POSTHOG_APPLY_API_KEY }}
@@ -43,3 +44,4 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read

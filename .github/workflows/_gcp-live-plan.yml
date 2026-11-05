@@ -131,6 +131,7 @@ jobs:
         env:
           BUCKET: ${{ inputs.plan_store_bucket }}
           PREFIX: ${{ inputs.plan_store_prefix }}
+          SPOKE: ${{ inputs.spoke_service_account }}
         run: ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
 
       - name: Upload the plan

@@ -136,6 +136,13 @@ jobs:
         shell: bash
         run: .github/scripts/workflows/run-actionlint.sh
 
+      # actionlint only reads what is inline in a workflow, so the scripts it runs
+      # get their own pass. The runner image ships shellcheck.
+      - name: Run shellcheck
+        if: steps.scope.outputs.relevant == 'true'
+        shell: bash
+        run: shellcheck .github/scripts/*/*.sh
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest

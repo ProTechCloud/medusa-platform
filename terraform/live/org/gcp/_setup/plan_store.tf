@@ -13,12 +13,11 @@ module "plan_store" {
 }
 
 locals {
-  # Every plan identity may add a plan under its own stack's prefix. The GCP
-  # plans sign in as their hub, which otherwise holds nothing, and it is the only
-  # identity here that is separate per environment: both spokes live outside this
-  # root, and the federated principal is shared by stg and prd.
+  # Every plan identity may add a plan under its own stack's prefix. The GCP plans
+  # upload as their spoke, which the environment's _setup root grants this, so a
+  # hub still holds nothing. The Cloudflare stacks share one plan principal, so it
+  # may write under all three of their prefixes.
   plan_store_writers = merge(
-    { for k, m in module.plan_hub : "gcp-${k}" => { prefix = "${k}/gcp/", member = m.member } },
     { setup = { prefix = "setup/", member = google_service_account.setup_plan.member } },
     local.direct_plan,
   )

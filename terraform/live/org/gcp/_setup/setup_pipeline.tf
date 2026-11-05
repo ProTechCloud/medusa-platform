@@ -3,8 +3,6 @@
 # apply of an organization and for emergencies.
 
 locals {
-  bootstrap_admin = "medusa-bootstrap@${var.management_project_id}.iam.gserviceaccount.com"
-
   setup_projects = merge(var.environment_projects, { org = var.management_project_id })
 }
 

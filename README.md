@@ -37,12 +37,17 @@ GitHub OIDC ──▶ identity pool ──▶ HUB ──tokenCreator──▶ SP
                        named spoke
 ```
 
-The hub is the entry point and holds nothing, except that a plan hub may create its plan
-under its own prefix in the plan store. An environment's apply spoke may also set who becomes
+The hub is the entry point and holds nothing. An environment's apply spoke may also set who becomes
 that environment's deploy and tunnel-token hubs, and its plan spoke may read them, so renaming
 a deploy is an ordinary apply of the workload root. The spoke lives inside the environment it
 changes and trusts exactly one hub, set authoritatively — a second path to it cannot be
 added without showing as a diff here.
+
+Two identities take the pool straight to a service account, with no hub or spoke, on purpose.
+The setup plan reads all three projects, so there is no one environment for a spoke to live
+in; it holds only reads. The bootstrap admin is the identity that creates the hubs and spokes,
+so it cannot sit behind them; only `_setup-apply.yml` reaches it, in an environment whose
+required reviewer it checks first.
 
 Three places must be told to make the second hop, because they authenticate separately:
 the `google` provider, the `gcs` backend at `init`, and each `terraform_remote_state`.

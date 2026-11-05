@@ -60,7 +60,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PATTERN: ^(${{ inputs.root }}/|terraform/modules/cloudflare/|\.github/workflows/_cloudflare-live-plan\.yml$|\.github/scripts/terraform/)
+          PATTERN: >-
+            ^(${{inputs.root}}/|terraform/modules/cloudflare/|\.github/workflows/_cloudflare-live-plan\.yml$|\.github/scripts/terraform/)
         run: .github/scripts/pull-request/stack-touched.sh
 
       # Deliberately not the minting token.
