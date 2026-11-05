@@ -69,10 +69,10 @@ the outcomes it chooses between and what each one means for every lens.
   (also: `@<reviewer-handle>`) — the handle in backticks, so the comment never notifies that account —
   so the reader sees that another bot or person caught it as well. When the nearby comment is about a
   _different_ defect, report yours with no note. Never drop a finding without saying so.
-- Answer with a short findings list under a `### Findings` heading. When your lens is clean, answer
-  exactly `Area clean (<lens>) — no findings.` with your own lens name — the review's completion check
-  looks for that exact line, and text that does not match it counts as a missing answer and is sent
-  again.
+- Answer with a short findings list under a `### Findings` heading. When your lens is clean, write the
+  line `Area clean (<lens>) — no findings.` with your own lens name, on a line of its own — the review's
+  completion check looks for that line. A short note or a `not examined:` line after it is fine. An
+  answer with neither findings nor that line counts as missing and is sent again.
 
 ## Evidence and tone
 

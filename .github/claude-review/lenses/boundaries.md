@@ -72,4 +72,4 @@ Order of attention:
 Answer with a short findings list. Each finding carries `file:line`, severity, a **one-sentence** problem,
 a **one-sentence** fix and — only where the reasoning truly needs it — an optional `detail` of two to
 four sentences, the **only** place longer reasoning may go. Don't pad the problem with evidence. If your
-lens is clean, answer exactly `Area clean (boundaries) — no findings.`
+lens is clean, answer with the line `Area clean (boundaries) — no findings.` on its own (a short note after it is fine)

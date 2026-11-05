@@ -92,4 +92,4 @@ Answer with a short findings list, citing requirement IDs where you can. Each fi
 `file:line`, severity, a **one-sentence** problem, a **one-sentence** fix and an optional `detail` of two
 to four sentences — the **only** place longer reasoning may go. Quote outside sources sparingly:
 requirement IDs and one-line excerpts only, never whole pages. If everything is covered and the
-description holds, answer exactly `Area clean (intent) — no findings.`
+description holds, answer with the line `Area clean (intent) — no findings.` on its own (a short note after it is fine)
