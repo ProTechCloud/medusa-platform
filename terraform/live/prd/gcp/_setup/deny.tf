@@ -7,7 +7,7 @@ locals {
 
 }
 
-# Two identities that must never read a secret value, for different reasons.
+# Three identities that must never read a secret value, for different reasons.
 #
 # Plan runs on pull-request code that nobody has reviewed: if it can read a
 # value, a two-line change to the plan step prints it to a public log.
@@ -17,6 +17,9 @@ locals {
 # — by hand, in the console, under pressure — would hand that job the value it
 # just wrote. Deny makes the one-way street a guarantee rather than a property
 # of the role list.
+#
+# The setup plan runs on pull-request code as well, and reads this whole project
+# to refresh this root's state.
 resource "google_iam_deny_policy" "no_secret_values" {
   parent = local.deny_parent
   name   = "medusa-no-secret-values"
@@ -30,6 +33,7 @@ resource "google_iam_deny_policy" "no_secret_values" {
       denied_principals = [
         module.plan_spoke.principal,
         module.tunnel_token_writer.principal,
+        local.org.setup_plan_principal,
       ]
       denied_permissions = ["secretmanager.googleapis.com/versions.access"]
     }
