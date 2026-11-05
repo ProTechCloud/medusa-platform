@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      # Only org/organization-member-access/gcp reads this, from its own
+      # environment.
+      ORG_MEMBERS_ACCESS:
+        required: false
 
 permissions:
   contents: read
@@ -89,4 +94,6 @@ jobs:
           TF_VAR_project_id: ${{ inputs.project_id }}
           TF_VAR_management_state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
           TF_VAR_environment: ${{ inputs.stack }}
+          TF_VAR_org_members_access: ${{ secrets.ORG_MEMBERS_ACCESS }}
+          TF_VAR_lift_domain_rule: ${{ vars.LIFT_DOMAIN_RULE || 'false' }}
         run: terraform apply -auto-approve -input=false -lock-timeout=5m -no-color
