@@ -66,6 +66,26 @@ output "posthog_token_writer" {
   value       = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.apply_entry/${one(local.posthog_apply_entries)}"
 }
 
+output "setup_plan" {
+  description = "Service account the _setup roots are planned as."
+  value       = google_service_account.setup_plan.email
+}
+
+output "setup_plan_principal" {
+  description = "The setup plan identity, in the form IAM deny policies expect."
+  value       = "principal://iam.googleapis.com/projects/-/serviceAccounts/${google_service_account.setup_plan.email}"
+}
+
+output "bootstrap_admin" {
+  description = "Service account _setup-apply.yml runs as."
+  value       = local.bootstrap_admin
+}
+
+output "plan_store_bucket" {
+  description = "Bucket the plan workflows upload the full plan to."
+  value       = module.plan_store.name
+}
+
 output "backend_deploy_hub" {
   value = google_service_account.backend_deploy_hub.email
 }
