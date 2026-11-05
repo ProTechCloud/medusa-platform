@@ -34,7 +34,8 @@ module "apply_hub" {
 #
 # This hub and the tunnel-token hubs hold no trust rule in this root. The rules
 # name a workflow and an environment, which change with the workload, so they
-# are in that environment's workload root, in trust.tf.
+# belong in that environment's workload root. Their members stay on the hubs in
+# GCP, with nothing managing them, until that root takes them over.
 resource "google_service_account" "backend_deploy_hub" {
   account_id   = "medusa-stg-deploy-hub"
   project      = var.management_project_id

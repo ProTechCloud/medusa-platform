@@ -18,8 +18,8 @@ locals {
   # hub still holds nothing. The Cloudflare stacks share one plan principal, so it
   # may write under all three of their prefixes.
   plan_store_writers = merge(
-    { setup = { prefix = "setup/", member = google_service_account.setup_plan.member } },
-    local.direct_plan,
+    { for stack in ["org", "stg", "prd"] : "setup-${stack}" => { prefix = "plan/setup-${stack}/", member = google_service_account.setup_plan.member } },
+    { for k, b in local.direct_plan : k => { prefix = "plan/${b.stack}/", member = b.member } },
   )
 }
 

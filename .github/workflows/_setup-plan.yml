@@ -94,8 +94,10 @@ jobs:
         working-directory: ${{ inputs.root }}
         env:
           BUCKET: ${{ vars.PLAN_STORE_BUCKET }}
-          PREFIX: setup/
-        run: ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
+          STACK: setup-${{ inputs.stack }}
+        run: >-
+          ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
+          || echo "::warning::The full plan did not reach the plan store."
 
       - name: Upload the plan
         if: steps.scope.outputs.relevant == 'true'
@@ -104,6 +106,6 @@ jobs:
           name: plan-setup-${{ inputs.stack }}
           path: |
             ${{ inputs.root }}/plan.txt
-            ${{ inputs.root }}/plan-url.txt
+            ${{ inputs.root }}/plan-prefix.txt
           retention-days: 5
           if-no-files-found: error

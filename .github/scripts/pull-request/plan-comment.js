@@ -28,15 +28,16 @@ module.exports = async ({ github, context, core }) => {
     const file = path.join('plans', `plan-${key}`, 'plan.txt')
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null
   }
-  // Written beside plan.txt once it is in the plan store. It opens for a
-  // signed-in developer. The file comes from a job that runs pull-request code,
-  // so only a plain link into our own bucket reaches the comment.
+  // The prefix the plan went under, recorded beside it once it is in the plan
+  // store. The file comes from a job that runs pull-request code, so it has to be
+  // this stack's own prefix before the comment builds a link from it. The link
+  // opens for a signed-in developer.
   const readUrl = key => {
-    const file = path.join('plans', `plan-${key}`, 'plan-url.txt')
+    const file = path.join('plans', `plan-${key}`, 'plan-prefix.txt')
     if (!fs.existsSync(file)) return null
-    const url = fs.readFileSync(file, 'utf8').trim()
-    const prefix = `https://storage.cloud.google.com/${process.env.PLAN_STORE_BUCKET}/`
-    return url.startsWith(prefix) && /^[\w./-]+$/.test(url.slice(prefix.length)) ? url : null
+    const prefix = fs.readFileSync(file, 'utf8').trim()
+    if (!new RegExp(`^plan/${key}/[0-9a-f]{32}/$`).test(prefix)) return null
+    return `https://storage.cloud.google.com/${process.env.PLAN_STORE_BUCKET}/${prefix}plan.txt`
   }
 
   // Three states per stack: it planned, it failed, or it was not

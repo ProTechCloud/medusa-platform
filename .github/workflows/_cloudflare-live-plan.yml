@@ -18,10 +18,6 @@ on:
         description: Bucket the full plan is uploaded to.
         required: true
         type: string
-      plan_store_prefix:
-        description: Prefix this stack may create objects under.
-        required: true
-        type: string
       workload_identity_provider:
         required: true
         type: string
@@ -122,8 +118,10 @@ jobs:
         working-directory: ${{ inputs.root }}
         env:
           BUCKET: ${{ inputs.plan_store_bucket }}
-          PREFIX: ${{ inputs.plan_store_prefix }}
-        run: ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
+          STACK: cloudflare-${{ inputs.stack }}
+        run: >-
+          ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
+          || echo "::warning::The full plan did not reach the plan store."
 
       - name: Upload the plan
         if: steps.scope.outputs.relevant == 'true'
@@ -132,6 +130,6 @@ jobs:
           name: plan-cloudflare-${{ inputs.stack }}
           path: |
             ${{ inputs.root }}/plan.txt
-            ${{ inputs.root }}/plan-url.txt
+            ${{ inputs.root }}/plan-prefix.txt
           retention-days: 5
           if-no-files-found: error

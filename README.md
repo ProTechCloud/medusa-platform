@@ -11,8 +11,7 @@ terraform/
     org/gcp/_setup            projects, state bucket, identity pool, hubs, developer roles
     org/cloudflare/_setup     zone-wide security settings
     org/cloudflare            DNS that belongs to no environment
-    org/posthog               the PostHog project
-    org/organization-member-access/…  who may use GCP and PostHog, from one list
+    org/posthog               the PostHog project and who administers it
     stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
     stg/gcp                   the stg infrastructure
     stg/cloudflare            stg tunnel and DNS
@@ -23,9 +22,9 @@ terraform/
 
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
 
-In every root, `main.tf` holds only the wiring: the values read from other roots and the
-root-wide locals. Every other block sits in a sibling file named for it, and a root with
-no wiring has no `main.tf`.
+In every root, `main.tf` holds only the wiring: the root-wide locals. A read of another
+root's outputs stays in `remote_state.tf`. Every other block sits in a sibling file named for
+it, and a root with no wiring has no `main.tf`.
 
 ## How CI reaches a cloud
 
@@ -38,8 +37,7 @@ GitHub OIDC ──▶ identity pool ──▶ HUB ──tokenCreator──▶ SP
 ```
 
 The hub is the entry point and holds nothing. An environment's apply spoke may also set who becomes
-that environment's deploy and tunnel-token hubs, and its plan spoke may read them, so renaming
-a deploy is an ordinary apply of the workload root. The spoke lives inside the environment it
+that environment's deploy and tunnel-token hubs, and its plan spoke may read them. The spoke lives inside the environment it
 changes and trusts exactly one hub, set authoritatively — a second path to it cannot be
 added without showing as a diff here.
 
@@ -78,14 +76,9 @@ match of the whole string — there is no wildcard anywhere.
 | apply hub | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
 | backend deploy hub | the app repo · `backend-cd.yml` · `backend-stg` environment · `refs/heads/stg` |
 | setup plan | this repo · `_setup-plan.yml` · a PR or `dev` |
-| bootstrap admin | this repo · `_setup-apply.yml` · `setup` or `organization-member-access` environment · `refs/heads/dev` |
-| member access PostHog state | this repo · `_posthog-live-apply.yml` · `organization-member-access` environment · `refs/heads/dev` |
+| bootstrap admin | this repo · `_setup-apply.yml` · `setup` environment · `refs/heads/dev` |
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
-
-The backend deploy hub and the tunnel-token hubs keep their rules in the environment's
-workload root, in `trust.tf`, so renaming a deploy workflow is one ordinary apply there. The
-other rules stay in `org/gcp/_setup`.
 
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
 which any pull request may add; pinning it would pin nothing.
@@ -246,10 +239,10 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_ORG_ID`, `GCP_BILLING_ACCOUNT`, `GCP_MANAGEMENT_PROJECT` | `org_id`, `billing_account`, `management_project_id` in `org/gcp/_setup/terraform.tfvars` |
 | `GCP_DEVELOPER_GROUP`, `GCP_ADMINISTRATOR` | `developer_group`, `administrator` in the same file |
 | `BACKEND_REPOSITORY` | `backend_repository` in the same file |
-| `LIFT_DOMAIN_RULE` | `true` only if the organization sets `iam.allowedPolicyMemberDomains`. Unset otherwise |
+| `POSTHOG_ADMINISTRATOR_EMAIL` | the existing member `org/posthog` raises to admin |
 
-Six secrets: two Cloudflare and two PostHog, because neither API has workload identity
-federation, and two for the member list. The Cloudflare plan token comes from `org/cloudflare/_setup` and is copied in
+Four secrets — two Cloudflare and two PostHog, because neither API has workload identity
+federation. The Cloudflare plan token comes from `org/cloudflare/_setup` and is copied in
 once with `terraform output -raw`; the mint token is made by hand, for the reason below.
 The PostHog keys are made by hand too: see step 6.
 
@@ -258,9 +251,7 @@ The PostHog keys are made by hand too: see step 6.
 | `CLOUDFLARE_MINT_TOKEN` | **environment** secret on `stg`, `prd`, `cloudflare-org` | Made by hand in the Cloudflare dashboard, from the Create Additional Tokens template under Manage Account → API Tokens. Creates and revokes the per-job write tokens. Never a repository secret: `uses: ./…` resolves from the pull request's branch, so a repository secret is reachable by any workflow an unreviewed pull request can rewrite. |
 | `CLOUDFLARE_PLAN_TOKEN` | repository secret | `org/cloudflare/_setup` → `plan_token`. Read-only, so a leak buys nothing but reading records that are already public. |
 | `POSTHOG_PLAN_API_KEY` | repository secret | A personal API key, read scopes only. Reachable from pull-request code, so its scopes are the whole defence. |
-| `POSTHOG_APPLY_API_KEY` | **environment** secret on `posthog-org` and `organization-member-access` | A personal API key that can also write projects and memberships. Environment-only for the same reason as the mint token. |
-| `ORG_MEMBERS_ACCESS` | **environment** secret on `organization-member-access` | The member list. See Human access. |
-| `POSTHOG_OWNER_EMAIL` | **environment** secret on `organization-member-access` | The PostHog organization's owner, whose level this repository never changes. |
+| `POSTHOG_APPLY_API_KEY` | **environment** secret on `posthog-org` | A personal API key that can also write projects and memberships. Environment-only for the same reason as the mint token. |
 
 **Every Cloudflare token here is account-owned, not user-owned.** They belong to the
 Cloudflare account rather than to a person, so nobody leaving the team takes CI with them,
@@ -292,10 +283,10 @@ it lives with the person who applies that root. Narrow surface, not low privileg
 says such a token "can create tokens with access to any of a user's resources", so
 rotating it is the lever to pull if anything leaks.
 
-GitHub **environments** `stg`, `prd`, `cloudflare-org`, `posthog-org`, `setup` and
-`organization-member-access` must exist; their names are part of the trust rules, not labels.
-Each accepts deployments from `dev` only. `setup` and `organization-member-access` also need a
-required reviewer that bars self-review, because `_setup-apply.yml` refuses to run without one.
+GitHub **environments** `stg`, `prd`, `cloudflare-org`, `posthog-org` and `setup` must exist;
+their names are part of the trust rules, not labels. Each accepts deployments from `dev` only.
+`setup` also needs a required reviewer that bars self-review, because `_setup-apply.yml` refuses
+to run without one.
 
 ### 5. Fill in the secret values
 
@@ -435,7 +426,7 @@ Two roles, and nobody gets a shell:
 | Role | Who | What it allows |
 |---|---|---|
 | read-only | the developer group | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
-| administration | one named person, and whoever the member list gives the `administration` profile | full access on `stg` and `prd`, for what CI cannot do, including reading a secret value |
+| administration | one named person | full access on `stg` and `prd`, for what CI cannot do |
 
 With read-only, stopping an instance, changing anything, or reading a secret value is
 refused. Membership is managed in the Google Group, so adding or removing a developer is
@@ -447,52 +438,21 @@ token secrets because it needs them to start. Any human shell would therefore re
 value, whatever the deny policy says, because the caller on that path is the VM and not the
 person.
 
-The administration role goes to named accounts and never to a group, so every change made
-outside CI has an owner. It sits outside the deny policy — it is the role for the cases
+The administration role is one account and not a group, so every change made outside CI
+has exactly one owner. It sits outside the deny policy — it is the role for the cases
 nobody listed in advance.
-
-The deny policy lives in `org/organization-member-access/gcp`, so only an approved run of
-`organization-member-access-cd` changes or re-asserts it. `org/gcp/_setup` still grants the
-group its read-only role.
-
-### The member list
-
-`ORG_MEMBERS_ACCESS` is a JSON object keyed by a short handle. Applying it needs an approved
-run of `organization-member-access-cd`:
-
-```json
-{
-  "handle": {
-    "email": "person@example.com",
-    "gcp": {
-      "account": "only when the Google account's primary address differs from email",
-      "stg": ["read_only", "administration", "logs"],
-      "prd": ["read_only"]
-    },
-    "posthog": "member or admin"
-  }
-}
-```
-
-`org/organization-member-access/gcp` imports the group's deny policy, so it only applies where `org/gcp/_setup` already created that policy. A new organization has to create it by hand first, with the name `medusa-developers-no-secret-values`, because `org/gcp/_setup` no longer does.
-
-A role in `stg` or `prd` is refused for any Google account outside the list, the
-administrator and the developer group. The organization's identities stay admitted, which
-is how CI keeps its roles. Taking a person off the list stops managing their PostHog level
-and leaves them in the organization.
 
 ## Pipelines
 
 | Workflow | When | What |
 |---|---|---|
-| `live-plan` | every PR | plans all nine stacks; `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
+| `live-plan` | every PR | plans all nine stacks; `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. A plan is never red because of the store: a failed upload is a warning, and the section then has no link. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary** |
 | `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
 | `setup-cd` | merge to `dev` touching a GCP `_setup` root, a module it sources or `.github/scripts/terraform/**` | applies org, then stg, then prd, each after a required reviewer approves in the `setup` environment. `TF_APPLY_ENABLE_PRD` does not gate it: `prd/gcp/_setup` holds identities and access, not the workload |
 | `stg-cd` | merge to `dev` | waits for `setup-cd` when the push touched its paths, applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
-| `organization-member-access-cd` | by hand from `dev` | applies the member list to GCP and PostHog, after a required reviewer approves in the `organization-member-access` environment |
 
 Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Plan org setup / plan`,
 `Plan stg setup / plan`, `Plan prd setup / plan`, `Code Quality Summary`, `Review — Claude`

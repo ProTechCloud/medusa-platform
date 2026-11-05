@@ -55,7 +55,7 @@ resource "google_storage_bucket_iam_member" "plan_writes_plan_store" {
 
   condition {
     title       = "only this environment's plans"
-    description = "Create objects under ${var.environment}/gcp/ and nothing else."
-    expression  = "resource.name.startsWith('projects/_/buckets/${local.org.plan_store_bucket}/objects/${var.environment}/gcp/')"
+    description = "Create objects under plan/gcp-${var.environment}/ and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${local.org.plan_store_bucket}/objects/plan/gcp-${var.environment}/')"
   }
 }

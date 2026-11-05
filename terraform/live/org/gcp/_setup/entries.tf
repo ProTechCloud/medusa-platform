@@ -65,10 +65,5 @@ locals {
     "${local.platform_repo}|${local.wf.setup_plan}|refs/heads/dev",
   ]
 
-  setup_apply_entries = [
-    "${local.platform_repo}|${local.wf.setup_apply}|setup|refs/heads/dev",
-    "${local.platform_repo}|${local.wf.setup_apply}|organization-member-access|refs/heads/dev",
-  ]
-
-  member_access_posthog_apply_entries = ["${local.platform_repo}|${local.wf.posthog_apply}|organization-member-access|refs/heads/dev"]
+  setup_apply_entries = ["${local.platform_repo}|${local.wf.setup_apply}|setup|refs/heads/dev"]
 }

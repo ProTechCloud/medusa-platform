@@ -23,14 +23,3 @@ moved {
   from = module.developer_access
   to   = module.human_access
 }
-
-# org/organization-member-access/gcp holds this policy now, to spare the listed
-# administrators. `removed` with `destroy = false` so the group is never without
-# it, then that root imports it.
-removed {
-  from = module.human_access.google_iam_deny_policy.no_secret_values
-
-  lifecycle {
-    destroy = false
-  }
-}

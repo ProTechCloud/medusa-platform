@@ -33,7 +33,6 @@ jobs:
       cancel-in-progress: false
     with:
       plan_store_bucket: ${{ vars.PLAN_STORE_BUCKET }}
-      plan_store_prefix: stg/gcp/
       environment: stg
       root: terraform/live/stg/gcp
       project_id: ${{ vars.GCP_PROJECT_STG }}
@@ -55,7 +54,6 @@ jobs:
       cancel-in-progress: false
     with:
       plan_store_bucket: ${{ vars.PLAN_STORE_BUCKET }}
-      plan_store_prefix: prd/gcp/
       environment: prd
       root: terraform/live/prd/gcp
       project_id: ${{ vars.GCP_PROJECT_PRD }}
@@ -77,7 +75,6 @@ jobs:
       cancel-in-progress: false
     with:
       plan_store_bucket: ${{ vars.PLAN_STORE_BUCKET }}
-      plan_store_prefix: org/cloudflare/live/
       stack: org
       root: terraform/live/org/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
@@ -97,7 +94,6 @@ jobs:
       cancel-in-progress: false
     with:
       plan_store_bucket: ${{ vars.PLAN_STORE_BUCKET }}
-      plan_store_prefix: stg/cloudflare/
       stack: stg
       root: terraform/live/stg/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
@@ -117,7 +113,6 @@ jobs:
       cancel-in-progress: false
     with:
       plan_store_bucket: ${{ vars.PLAN_STORE_BUCKET }}
-      plan_store_prefix: prd/cloudflare/
       stack: prd
       root: terraform/live/prd/cloudflare
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
@@ -137,7 +132,6 @@ jobs:
       cancel-in-progress: false
     with:
       plan_store_bucket: ${{ vars.PLAN_STORE_BUCKET }}
-      plan_store_prefix: org/posthog/live/
       stack: org
       root: terraform/live/org/posthog
       state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
