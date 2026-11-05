@@ -61,7 +61,7 @@ A lens's answer is **usable** when it is either of these:
 
 - **findings** — a `### Findings` heading followed by at least one entry carrying `file:line`, a severity
   label, a problem and a fix; or
-- **clean** — the line `Area clean (<lens>) — no findings.` anywhere in the answer, on a line of its own.
+- **clean** — the line `Area clean (<lens>) — no findings.` at the start of a line — anything may follow it on that line.
   A note, a `not examined:` line or a short explanation before or after it does not change that: the
   answer is still clean, and still usable.
 
