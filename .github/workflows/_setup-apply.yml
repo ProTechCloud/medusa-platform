@@ -76,7 +76,7 @@ jobs:
         working-directory: ${{ inputs.root }}
         env:
           BUCKET: ${{ vars.MANAGEMENT_STATE_BUCKET }}
-        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/init.sh"
+        run: ${{ github.workspace }}/.github/scripts/terraform/init.sh
 
       # Each root declares only some of these. Terraform ignores the others.
       - name: Apply

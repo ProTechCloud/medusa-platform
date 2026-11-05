@@ -118,4 +118,4 @@ jobs:
         env:
           PROJECT: ${{ vars.GCP_PROJECT_STG }}
           SECRET: medusa_stg_posthog_posthog-project-token
-        run: "$GITHUB_WORKSPACE/.github/scripts/posthog/write-project-token.sh"
+        run: ${{ github.workspace }}/.github/scripts/posthog/write-project-token.sh

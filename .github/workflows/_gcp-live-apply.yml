@@ -120,7 +120,7 @@ jobs:
         env:
           BUCKET: ${{ inputs.state_bucket }}
           SPOKE: ${{ inputs.spoke_service_account }}
-        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/init.sh"
+        run: ${{ github.workspace }}/.github/scripts/terraform/init.sh
 
       # No separate plan step. The plan a reviewer approved was made against
       # the state before the merge, and apply plans again on its own against
