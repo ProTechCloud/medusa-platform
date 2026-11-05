@@ -29,10 +29,14 @@ module.exports = async ({ github, context, core }) => {
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null
   }
   // Written beside plan.txt once it is in the plan store. It opens for a
-  // signed-in developer.
+  // signed-in developer. The file comes from a job that runs pull-request code,
+  // so only a plain link into our own bucket reaches the comment.
   const readUrl = key => {
     const file = path.join('plans', `plan-${key}`, 'plan-url.txt')
-    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : null
+    if (!fs.existsSync(file)) return null
+    const url = fs.readFileSync(file, 'utf8').trim()
+    const prefix = `https://storage.cloud.google.com/${process.env.PLAN_STORE_BUCKET}/`
+    return url.startsWith(prefix) && /^[\w./-]+$/.test(url.slice(prefix.length)) ? url : null
   }
 
   // Three states per stack: it planned, it failed, or it was not

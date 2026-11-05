@@ -223,6 +223,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           RESULTS: ${{ toJSON(needs) }}
+          PLAN_STORE_BUCKET: ${{ vars.PLAN_STORE_BUCKET }}
         with:
           script: |
             const run = require('./.github/scripts/pull-request/plan-comment.js')

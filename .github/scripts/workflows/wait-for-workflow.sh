@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Waits for WORKFLOW's run on this commit when the push touched PATHS, one path
 # prefix per line, and fails unless that run succeeded. The approval it may be
-# waiting on has no deadline, so neither does this.
+# waiting on has no deadline of its own, so the caller's timeout-minutes is the
+# limit.
 set -euo pipefail
 if [ "$EVENT_NAME" != "push" ]; then
   echo "not a push: nothing to wait for"

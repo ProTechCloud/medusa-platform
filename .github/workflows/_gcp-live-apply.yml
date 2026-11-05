@@ -40,7 +40,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  actions: read
 
 env:
   TERRAFORM_VERSION: 1.16.6
@@ -52,6 +51,12 @@ jobs:
   setup-first:
     name: wait for setup-cd
     runs-on: ubuntu-latest
+    # How long an approval on setup-cd may take. Past it the apply fails, and
+    # re-running this job picks the wait up again.
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:

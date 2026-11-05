@@ -60,7 +60,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PATTERN: ^(${{ inputs.root }}/|\.github/workflows/_posthog-live-plan\.yml$)
+          PATTERN: ^(${{ inputs.root }}/|\.github/workflows/_posthog-live-plan\.yml$|\.github/scripts/terraform/)
         run: .github/scripts/pull-request/stack-touched.sh
 
       # A read-only personal key, for the same reason the Cloudflare plan gets
