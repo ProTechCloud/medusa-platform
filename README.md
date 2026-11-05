@@ -22,6 +22,10 @@ terraform/
 
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
 
+In every root, `main.tf` holds only the wiring: the values read from other roots and the
+root-wide locals. Every other block sits in a sibling file named for it, and a root with
+no wiring has no `main.tf`.
+
 ## How CI reaches a cloud
 
 ```
