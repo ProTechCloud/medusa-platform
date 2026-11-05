@@ -18,8 +18,9 @@ tunnel_write=$(echo "$groups" | jq -r '.result[] | select(.name=="Cloudflare Tun
 
 body=$(jq -n \
   --arg name "medusa-tunnel-token-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+  --arg expires "$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)" \
   --arg acct "$ACCOUNT_ID" --arg g "$tunnel_write" \
-  '{name: $name, policies: [{effect: "allow",
+  '{name: $name, expires_on: $expires, policies: [{effect: "allow",
     resources: {("com.cloudflare.api.account." + $acct): "*"},
     permission_groups: [{id: $g}]}]}')
 

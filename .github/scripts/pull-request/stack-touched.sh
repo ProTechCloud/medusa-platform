@@ -8,7 +8,7 @@ if [ "$EVENT_NAME" != "pull_request" ]; then
   exit 0
 fi
 changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
-if echo "$changed" | grep -qE "$PATTERN"; then
+if grep -qE "$PATTERN" <<< "$changed"; then
   echo "relevant=true" >> "$GITHUB_OUTPUT"
 else
   echo "relevant=false" >> "$GITHUB_OUTPUT"

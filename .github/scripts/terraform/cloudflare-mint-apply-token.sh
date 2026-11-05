@@ -28,12 +28,14 @@ settings_write=$(id_of 'Zone Settings Write')
 
 body=$(jq -n \
   --arg name "medusa-apply-$STACK-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+  --arg expires "$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)" \
   --arg acct "$ACCOUNT_ID" --arg zone "$ZONE_ID" \
   --arg tunnel_write "$tunnel_write" \
   --arg zone_read "$zone_read" \
   --arg dns_write "$dns_write" \
   --arg settings_write "$settings_write" \
   '{name: $name,
+    expires_on: $expires,
     policies: [
       {effect: "allow",
        resources: {("com.cloudflare.api.account." + $acct): "*"},

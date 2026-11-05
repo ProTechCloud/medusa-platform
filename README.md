@@ -458,9 +458,10 @@ nobody listed in advance.
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
 
-Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Plan org setup / plan`,
-`Plan stg setup / plan`, `Plan prd setup / plan`, `Code Quality Summary`, `Review — Claude`
-and `Quality — PR Template`.
+Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Code Quality Summary`,
+`Review — Claude` and `Quality — PR Template`. `Plan org setup / plan`, `Plan stg setup / plan`
+and `Plan prd setup / plan` join them once the pull request that adds them has merged, because
+requiring them earlier would hold every open pull request.
 A check that never runs counts as passed, which is why the plan jobs always run and why the
 summary job exists at all.
 

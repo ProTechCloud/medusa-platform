@@ -60,7 +60,7 @@ module.exports = async ({ github, context, core }) => {
     if (s.plan === null) {
       return [`### ${label(s.key)}`, '', '**The plan failed.** Read the job log.', '']
     }
-    const notice = cut ? `\n> Output cut. Read the full plan at the link.` : ''
+    const notice = cut ? `\n> Output cut. Read the full plan ${s.url ? 'at the link' : 'in the job log'}.` : ''
     const link = s.url ? `[Full plan](${s.url})` : '_No link to the full plan — see the log._'
     // Counted from the full plan, never from the truncated copy.
     // Terraform prints `Plan: …` as its last line, so cutting the

@@ -13,7 +13,7 @@ touched=false
 changed=$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA")
 while IFS= read -r path; do
   [ -n "$path" ] || continue
-  if echo "$changed" | grep -q "^$path"; then
+  if grep -q "^$path" <<< "$changed"; then
     touched=true
   fi
 done <<< "$PATHS"

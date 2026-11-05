@@ -8,10 +8,10 @@ else
   changed=$(git diff --name-only \
     "$BASE_SHA" \
     "$HEAD_SHA")
-  if echo "$changed" | grep -q "^terraform/modules/"; then
+  if grep -q "^terraform/modules/" <<< "$changed"; then
     chosen="$all"
   else
-    chosen=$(for r in $all; do echo "$changed" | grep -q "^$r/" && echo "$r"; done || true)
+    chosen=$(for r in $all; do grep -q "^$r/" <<< "$changed" && echo "$r"; done || true)
   fi
 fi
 

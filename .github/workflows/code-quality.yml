@@ -202,7 +202,7 @@ jobs:
   summary:
     name: Code Quality Summary
     if: always()
-    needs: [format, validate, actionlint, gitleaks, trivy]
+    needs: [discover, format, validate, actionlint, gitleaks, trivy]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
