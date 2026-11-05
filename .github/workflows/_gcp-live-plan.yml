@@ -104,7 +104,7 @@ jobs:
         env:
           BUCKET: ${{ inputs.state_bucket }}
           SPOKE: ${{ inputs.spoke_service_account }}
-        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/init.sh"
+        run: ${{ github.workspace }}/.github/scripts/terraform/init.sh
 
       # -lock=false: a plan writes no state, so it has no reason to take the
       # lock, and taking it broke an apply. A pull request's plan can run while
@@ -120,7 +120,7 @@ jobs:
           TF_VAR_project_id: ${{ inputs.project_id }}
           TF_VAR_management_state_bucket: ${{ inputs.management_state_bucket }}
           TF_VAR_spoke_service_account: ${{ inputs.spoke_service_account }}
-        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/plan.sh"
+        run: ${{ github.workspace }}/.github/scripts/terraform/plan.sh
 
       # The plan text travels as an artifact, not as a comment. Naming it
       # after the stack is what lets the aggregator label each section and
@@ -131,7 +131,7 @@ jobs:
         env:
           BUCKET: ${{ inputs.plan_store_bucket }}
           PREFIX: ${{ inputs.plan_store_prefix }}
-        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/plan-store-upload.sh"
+        run: ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
 
       - name: Upload the plan
         if: steps.scope.outputs.relevant == 'true'
