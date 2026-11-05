@@ -93,7 +93,7 @@ jobs:
       # The project token SDKs send with, into stg's secret, where the VM reads
       # it before every start of the app. Same identity as the state access
       # above: the stg secret grants this apply entry secretVersionAdder and
-      # nothing else (stg/gcp/main.tf), so no service account is impersonated.
+      # nothing else (stg/gcp/posthog_project_token.tf), so no service account is impersonated.
       #
       # stg-cd creates the secret and that grant on the same push that runs
       # this, in a workflow of its own, so on the first merge they may not
