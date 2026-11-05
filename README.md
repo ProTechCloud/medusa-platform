@@ -450,11 +450,11 @@ nobody listed in advance.
 
 | Workflow | When | What |
 |---|---|---|
-| `live-plan` | every PR | plans all nine stacks; `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. A plan is never red because of the store: a failed upload is a warning, and the section then has no link. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
+| `live-plan` | every PR | plans all nine stacks; changes under `.github/scripts/terraform/` also trigger the GCP, Cloudflare, PostHog and setup plans. `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. A plan is never red because of the store: a failed upload is a warning, and the section then has no link. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary** |
 | `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
 | `setup-cd` | merge to `dev` touching a GCP `_setup` root, a module it sources or `.github/scripts/terraform/**` | applies org, then stg, then prd, each after a required reviewer approves in the `setup` environment. `TF_APPLY_ENABLE_PRD` does not gate it: `prd/gcp/_setup` holds identities and access, not the workload |
-| `stg-cd` | merge to `dev` | waits for `setup-cd` when the push touched its paths, applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
+| `stg-cd` | merge to `dev` | waits for `setup-cd` when the push touched its paths (a cancelled setup run is accepted only when its commit is no longer the head of `dev`), applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
 

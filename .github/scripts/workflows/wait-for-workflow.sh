@@ -39,6 +39,21 @@ while :; do
 done
 
 conclusion=$(echo "$run" | jq -r .conclusion)
+if [ "$conclusion" = "cancelled" ]; then
+  # Concurrency replaces a pending run when a newer push arrives. That old
+  # commit will never get a successful setup run, even on a workload retry.
+  # Only excuse cancellation after confirming dev has moved on; cancellation
+  # of the current head must still block its workload apply.
+  head=$(gh api "repos/$REPO/git/ref/heads/dev" --jq '.object.sha')
+  if [ -z "$head" ]; then
+    echo "::error::Could not determine the head of dev."
+    exit 1
+  fi
+  if [ "$head" != "$GITHUB_SHA" ]; then
+    echo "$WORKFLOW was cancelled for a commit superseded on dev: nothing to wait for"
+    exit 0
+  fi
+fi
 if [ "$conclusion" != "success" ]; then
   echo "::error::$WORKFLOW ended as $conclusion: $(echo "$run" | jq -r .url)"
   exit 1

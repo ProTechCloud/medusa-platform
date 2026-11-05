@@ -118,9 +118,6 @@ jobs:
           TF_VAR_spoke_service_account: ${{ inputs.spoke_service_account }}
         run: ${{ github.workspace }}/.github/scripts/terraform/plan.sh
 
-      # The plan text travels as an artifact, not as a comment. Naming it
-      # after the stack is what lets the aggregator label each section and
-      # tell a stack that was skipped from one that failed.
       - name: Put the full plan in the plan store
         if: steps.scope.outputs.relevant == 'true'
         working-directory: ${{ inputs.root }}
@@ -132,6 +129,9 @@ jobs:
           ${{ github.workspace }}/.github/scripts/terraform/plan-store-upload.sh
           || echo "::warning::The full plan did not reach the plan store."
 
+      # The plan text travels as an artifact, not as a comment. Naming it
+      # after the stack is what lets the aggregator label each section and
+      # tell a stack that was skipped from one that failed.
       - name: Upload the plan
         if: steps.scope.outputs.relevant == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
