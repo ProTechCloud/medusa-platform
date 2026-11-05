@@ -82,10 +82,10 @@ jobs:
 
       - name: Init
         working-directory: ${{ inputs.root }}
-        run: |
-          terraform init -lockfile=readonly \
-            -backend-config="bucket=${{ inputs.state_bucket }}" \
-            -backend-config="impersonate_service_account=${{ inputs.spoke_service_account }}"
+        env:
+          BUCKET: ${{ inputs.state_bucket }}
+          SPOKE: ${{ inputs.spoke_service_account }}
+        run: "$GITHUB_WORKSPACE/.github/scripts/terraform/init.sh"
 
       # No separate plan step. The plan a reviewer approved was made against
       # the state before the merge, and apply plans again on its own against
