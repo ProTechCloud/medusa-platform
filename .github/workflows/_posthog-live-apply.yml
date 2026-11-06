@@ -60,10 +60,9 @@ jobs:
       - name: Use the PostHog apply key
         shell: bash
         env:
-          APPLY_KEY: ${{ secrets.POSTHOG_APPLY_API_KEY }}
-        run: |
-          echo "::add-mask::$APPLY_KEY"
-          echo "POSTHOG_API_KEY=$APPLY_KEY" >> "$GITHUB_ENV"
+          NAME: POSTHOG_API_KEY
+          VALUE: ${{ secrets.POSTHOG_APPLY_API_KEY }}
+        run: .github/scripts/workflows/export-masked.sh
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
@@ -93,7 +92,7 @@ jobs:
       # The project token SDKs send with, into stg's secret, where the VM reads
       # it before every start of the app. Same identity as the state access
       # above: the stg secret grants this apply entry secretVersionAdder and
-      # nothing else (stg/gcp/main.tf), so no service account is impersonated.
+      # nothing else (stg/gcp/posthog_project_token.tf), so no service account is impersonated.
       #
       # stg-cd creates the secret and that grant on the same push that runs
       # this, in a workflow of its own, so on the first merge they may not
@@ -106,28 +105,4 @@ jobs:
         env:
           PROJECT: ${{ vars.GCP_PROJECT_STG }}
           SECRET: medusa_stg_posthog_posthog-project-token
-        run: |
-          set -euo pipefail
-          value=$(terraform output -raw project_api_token)
-
-          # An empty output would become the latest version, and the VM reads
-          # versions/latest.
-          if [ -z "$value" ]; then
-            echo "::error::terraform output project_api_token is empty. The secret was left untouched."
-            exit 1
-          fi
-          echo "::add-mask::$value"
-
-          deadline=$((SECONDS + 600))
-          # Through stdin, never an argument: arguments show up in process
-          # listings and in gcloud's own command log.
-          until printf '%s' "$value" | gcloud secrets versions add "$SECRET" \
-            --project="$PROJECT" \
-            --data-file=-; do
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::$SECRET could not be written for ten minutes. Check that stg-cd created it and its grant."
-              exit 1
-            fi
-            echo "Waiting for $SECRET and its grant from stg-cd…"
-            sleep 20
-          done
+        run: ${{ github.workspace }}/.github/scripts/posthog/write-project-token.sh

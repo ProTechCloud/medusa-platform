@@ -1,77 +1,12 @@
-module "registry" {
-  source = "../../../modules/gcp/artifact-registry"
+locals {
+  setup = data.terraform_remote_state.setup.outputs
+  name  = "medusa-${var.environment}"
 
-  project_id  = var.project_id
-  name        = local.name
-  location    = var.region
-  description = "Container images for medusa (${var.environment})"
-  labels      = merge(local.labels, { component = "registry" })
+  # Base labels. `component` is added at each module call, because the point
+  # of the label is to tell the parts apart in billing and in an audit — one
+  # value shared by every resource would not.
+  labels = {
+    env          = var.environment
+    "managed-by" = "terraform"
+  }
 }
-
-# The container only. Terraform never learns the value: the deploy job fetches
-# the token from Cloudflare and writes a new version under the writer
-# identity, so the token is absent from this state file by construction
-# rather than by redaction.
-module "tunnel_token" {
-  source = "../../../modules/gcp/secret"
-
-  project_id  = var.project_id
-  environment = var.environment
-  domain      = "cloudflare"
-  name        = "tunnel-token"
-  location    = var.region
-  kms_key     = local.setup.secrets_key
-  labels      = merge(local.labels, { component = "secret" })
-}
-
-# The writer's entire reason to exist, scoped to this one secret. secretVersionAdder
-# rather than secretAccessor: it may add a version, and cannot read one back.
-resource "google_secret_manager_secret_iam_member" "writer_adds_versions" {
-  project   = var.project_id
-  secret_id = module.tunnel_token.secret_id
-  role      = "roles/secretmanager.secretVersionAdder"
-  member    = "serviceAccount:${local.setup.tunnel_token_writer}"
-}
-
-# The container only, like the tunnel token. The PostHog apply reads the
-# project token from its own state and writes it here as a new version, so the
-# value never reaches this state file.
-module "posthog_project_token" {
-  source = "../../../modules/gcp/secret"
-
-  project_id  = var.project_id
-  environment = var.environment
-  domain      = "posthog"
-  name        = "posthog-project-token"
-  location    = var.region
-  kms_key     = local.setup.secrets_key
-  labels      = merge(local.labels, { component = "secret" })
-}
-
-# Add a version and nothing else: the PostHog apply cannot read one back.
-resource "google_secret_manager_secret_iam_member" "posthog_writer_adds_versions" {
-  project   = var.project_id
-  secret_id = module.posthog_project_token.secret_id
-  role      = "roles/secretmanager.secretVersionAdder"
-  member    = local.setup.posthog_token_writer
-}
-
-module "api" {
-  source = "../../../modules/gcp/api-vm"
-
-  project_id  = var.project_id
-  name        = local.name
-  region      = var.region
-  zone        = var.zone
-  environment = var.environment
-  app_port    = var.app_port
-  labels      = merge(local.labels, { component = "api" })
-
-  service_account_email      = local.setup.instance_service_account
-  tunnel_token_secret_id     = module.tunnel_token.secret_id
-  posthog_token_secret_id    = module.posthog_project_token.secret_id
-  otel_traces_sampler_arg    = "0.1" # A tenth of the traces in prd, where traffic is real.
-  artifact_registry_name     = module.registry.name
-  artifact_registry_location = module.registry.location
-}
-

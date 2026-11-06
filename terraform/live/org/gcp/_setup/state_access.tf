@@ -30,6 +30,7 @@ locals {
   direct_plan = merge([
     for stack, s in local.direct_state_stacks : {
       for entry in s.plan : "${stack}|${entry}" => {
+        stack  = stack
         prefix = s.prefix
         member = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.plan_entry/${entry}"
       }

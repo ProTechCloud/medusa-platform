@@ -15,12 +15,16 @@ terraform/
     stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
     stg/gcp                   the stg infrastructure
     stg/cloudflare            stg tunnel and DNS
-    prd/…                     the same, planned but never applied
+    prd/…                     the same: prd/gcp/_setup is applied by setup-cd, the rest planned but never applied
   modules/
     gcp/…  cloudflare/…       shared code, no state of its own
 ```
 
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
+
+In every root, `main.tf` holds only the wiring: the root-wide locals. A read of another
+root's outputs stays in `remote_state.tf`. Every other block sits in a sibling file named for
+it, and a root with no wiring has no `main.tf`.
 
 ## How CI reaches a cloud
 
@@ -32,9 +36,16 @@ GitHub OIDC ──▶ identity pool ──▶ HUB ──tokenCreator──▶ SP
                        named spoke
 ```
 
-The hub is the entry point and holds nothing. The spoke lives inside the environment it
+The hub is the entry point and holds nothing. An environment's apply spoke may also set who becomes
+that environment's deploy and tunnel-token hubs, and its plan spoke may read them. The spoke lives inside the environment it
 changes and trusts exactly one hub, set authoritatively — a second path to it cannot be
 added without showing as a diff here.
+
+Two identities take the pool straight to a service account, with no hub or spoke, on purpose.
+The setup plan reads all three projects, so there is no one environment for a spoke to live
+in; it holds only reads. The bootstrap admin is the identity that creates the hubs and spokes,
+so it cannot sit behind them; only `_setup-apply.yml` reaches it, in an environment whose
+required reviewer it checks first.
 
 Three places must be told to make the second hop, because they authenticate separately:
 the `google` provider, the `gcs` backend at `init`, and each `terraform_remote_state`.
@@ -64,15 +75,24 @@ match of the whole string — there is no wildcard anywhere.
 | plan hub | this repo · the shared plan workflow · a PR or `dev` |
 | apply hub | this repo · the shared apply workflow · the matching environment · `refs/heads/dev` |
 | backend deploy hub | the app repo · `backend-cd.yml` · `backend-stg` environment · `refs/heads/stg` |
+| setup plan | this repo · `_setup-plan.yml` · a PR or `dev` |
+| bootstrap admin | this repo · `_setup-apply.yml` · `setup` environment · `refs/heads/dev` |
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
+
+The backend deploy hub's rule and the tunnel-token hubs' rules are not codified right now:
+their members stay on the hubs in GCP, with nothing managing them, until each environment's
+workload root takes them over.
 
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
 which any pull request may add; pinning it would pin nothing.
 
 ## Bootstrap
 
-Everything below is done once, by a person. CI cannot do any of it — that is the point.
+Everything below is done once, by a person, for the first apply of an organization. After
+that, every `_setup` change goes through `setup-cd` except `org/cloudflare/_setup`, which
+stays by hand because it needs the Cloudflare bootstrap token. The hand path also stays for
+emergencies.
 
 ### 1. The bootstrap admin
 
@@ -217,6 +237,12 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
 | `POSTHOG_ORGANIZATION_ID` | PostHog → Settings → Organization → General |
+| `GCP_SETUP_PLAN` | `org/gcp/_setup` → `setup_plan` |
+| `GCP_BOOTSTRAP_ADMIN` | `org/gcp/_setup` → `bootstrap_admin` |
+| `PLAN_STORE_BUCKET` | `org/gcp/_setup` → `plan_store_bucket` |
+| `GCP_ORG_ID`, `GCP_BILLING_ACCOUNT`, `GCP_MANAGEMENT_PROJECT` | `org_id`, `billing_account`, `management_project_id` in `org/gcp/_setup/terraform.tfvars` |
+| `GCP_DEVELOPER_GROUP`, `GCP_ADMINISTRATOR` | `developer_group`, `administrator` in the same file |
+| `BACKEND_REPOSITORY` | `backend_repository` in the same file |
 | `POSTHOG_ADMINISTRATOR_EMAIL` | the existing member `org/posthog` raises to admin |
 
 Four secrets — two Cloudflare and two PostHog, because neither API has workload identity
@@ -261,8 +287,10 @@ it lives with the person who applies that root. Narrow surface, not low privileg
 says such a token "can create tokens with access to any of a user's resources", so
 rotating it is the lever to pull if anything leaks.
 
-GitHub **environments** `stg`, `prd`, `cloudflare-org` and `posthog-org` must exist; their
-names are part of the trust rules, not labels. Each accepts deployments from `dev` only.
+GitHub **environments** `stg`, `prd`, `cloudflare-org`, `posthog-org` and `setup` must exist;
+their names are part of the trust rules, not labels. Each accepts deployments from `dev` only.
+`setup` also needs a required reviewer that bars self-review, because `_setup-apply.yml` refuses
+to run without one.
 
 ### 5. Fill in the secret values
 
@@ -422,15 +450,18 @@ nobody listed in advance.
 
 | Workflow | When | What |
 |---|---|---|
-| `live-plan` | every PR | plans all six stacks; `Plan stg` and `Plan prd` always report, the Cloudflare and PostHog stacks only when touched. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
-| `code-quality` | every PR | fmt, validate, tflint, actionlint, gitleaks, trivy → **Code Quality Summary** |
+| `live-plan` | every PR | plans all nine stacks; changes under `.github/scripts/terraform/` also trigger the GCP, Cloudflare, PostHog and setup plans. `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. A plan is never red because of the store: a failed upload is a warning, and the section then has no link. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
+| `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary** |
 | `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
-| `stg-cd` | merge to `dev` | applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
+| `setup-cd` | merge to `dev` touching a GCP `_setup` root, a module it sources or `.github/scripts/terraform/**` | applies org, then stg, then prd, each after a required reviewer approves in the `setup` environment. `TF_APPLY_ENABLE_PRD` does not gate it: `prd/gcp/_setup` holds identities and access, not the workload |
+| `stg-cd` | merge to `dev` | only the GCP apply waits for `setup-cd` when the push touched its paths; failed or cancelled setup runs block that apply, even for an older commit. Cloudflare runs in parallel and can apply while setup approval is pending or after setup fails. The tunnel token is written only after both applies succeed |
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
-| `{gcp,cloudflare}-prd-live-apply` | every push | **switched off** — shows as skipped |
+| `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
 
-Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Code Quality Summary` and
-`Quality — PR Template`.
+Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Code Quality Summary`,
+`Review — Claude` and `Quality — PR Template`. `Plan org setup / plan`, `Plan stg setup / plan`
+and `Plan prd setup / plan` join them once the pull request that adds them has merged, because
+requiring them earlier would hold every open pull request.
 A check that never runs counts as passed, which is why the plan jobs always run and why the
 summary job exists at all.
 

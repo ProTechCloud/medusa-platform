@@ -45,8 +45,48 @@ env:
   TERRAFORM_VERSION: 1.16.6
 
 jobs:
+  # A workload root reads what its _setup root outputs, so a push that changes
+  # both applies them in that order, across two workflows. Keep these paths equal
+  # to setup-cd.yml's.
+  setup-first:
+    name: wait for setup-cd
+    runs-on: ubuntu-latest
+    # How long an approval on setup-cd may take. Past it the apply fails, and
+    # re-running this job picks the wait up again.
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Wait for setup-cd when this push changed a _setup root
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          WORKFLOW: setup-cd.yml
+          PATHS: |
+            terraform/live/org/gcp/_setup/
+            terraform/live/stg/gcp/_setup/
+            terraform/live/prd/gcp/_setup/
+            terraform/modules/gcp/developer-access/
+            terraform/modules/gcp/plan-store/
+            terraform/modules/gcp/project/
+            terraform/modules/gcp/project-pin/
+            terraform/modules/gcp/state-bucket/
+            terraform/modules/gcp/wif-hub/
+            terraform/modules/gcp/wif-spoke/
+            .github/scripts/terraform/
+        run: .github/scripts/workflows/wait-for-workflow.sh
+
   apply:
     name: apply
+    needs: setup-first
     runs-on: ubuntu-latest
 
     environment:
@@ -82,10 +122,10 @@ jobs:
 
       - name: Init
         working-directory: ${{ inputs.root }}
-        run: |
-          terraform init -lockfile=readonly \
-            -backend-config="bucket=${{ inputs.state_bucket }}" \
-            -backend-config="impersonate_service_account=${{ inputs.spoke_service_account }}"
+        env:
+          BUCKET: ${{ inputs.state_bucket }}
+          SPOKE: ${{ inputs.spoke_service_account }}
+        run: ${{ github.workspace }}/.github/scripts/terraform/init.sh
 
       # No separate plan step. The plan a reviewer approved was made against
       # the state before the merge, and apply plans again on its own against
