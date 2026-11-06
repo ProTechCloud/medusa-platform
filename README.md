@@ -454,7 +454,7 @@ nobody listed in advance.
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary** |
 | `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
 | `setup-cd` | merge to `dev` touching a GCP `_setup` root, a module it sources or `.github/scripts/terraform/**` | applies org, then stg, then prd, each after a required reviewer approves in the `setup` environment. `TF_APPLY_ENABLE_PRD` does not gate it: `prd/gcp/_setup` holds identities and access, not the workload |
-| `stg-cd` | merge to `dev` | waits for `setup-cd` when the push touched its paths (a cancelled setup run is accepted only when its commit is no longer the head of `dev`), applies stg GCP, writes the tunnel token, applies stg Cloudflare alongside |
+| `stg-cd` | merge to `dev` | only the GCP apply waits for `setup-cd` when the push touched its paths; failed or cancelled setup runs block that apply, even for an older commit. Cloudflare runs in parallel and can apply while setup approval is pending or after setup fails. The tunnel token is written only after both applies succeed |
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
 
