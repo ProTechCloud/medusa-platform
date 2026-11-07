@@ -7,7 +7,8 @@
 # become its spoke first.
 #
 # The caller turns a failure here into a warning: a plan is never red because of
-# the store.
+# the store. Each upload is bounded, so a stalled connection fails instead of
+# holding the plan job.
 set -euo pipefail
 if [ -z "${BUCKET:-}" ]; then
   echo "no plan store is set: skipping the upload"
@@ -20,7 +21,7 @@ echo "::add-mask::$token"
 
 upload() {
   name=$(jq -rn --arg object "$prefix$2" '$object | @uri')
-  curl -sSf -X POST \
+  curl -sSf --connect-timeout 10 --max-time 120 -X POST \
     -H "Authorization: Bearer $token" \
     -H "Content-Type: text/plain" \
     --data-binary @"$1" \
