@@ -1,0 +1,47 @@
+name: organization-member-access-cd
+
+# Who may use GCP and PostHog, from the list in the ORG_MEMBERS_ACCESS secret.
+# Run by hand from dev, never on a merge: a wrong list can lock a person out, so
+# changing it is a decision someone takes, and a reviewer approves each job.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  gcp:
+    name: apply member access gcp
+    uses: ./.github/workflows/_setup-apply.yml
+    with:
+      stack: member-access
+      gh_environment: organization-member-access
+      root: terraform/live/org/organization-member-access/gcp
+    secrets:
+      ORG_MEMBERS_ACCESS: ${{ secrets.ORG_MEMBERS_ACCESS }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+
+  posthog:
+    name: apply member access posthog
+    uses: ./.github/workflows/_posthog-live-apply.yml
+    with:
+      stack: member-access
+      gh_environment: organization-member-access
+      root: terraform/live/org/organization-member-access/posthog
+      state_bucket: ${{ vars.MANAGEMENT_STATE_BUCKET }}
+      workload_identity_provider: ${{ vars.GCP_APPLY_PROVIDER }}
+      audience: ${{ vars.GCP_WIF_AUDIENCE }}
+      requires_reviewer: true
+      writes_project_token: false
+    secrets:
+      POSTHOG_APPLY_API_KEY: ${{ secrets.POSTHOG_APPLY_API_KEY }}
+      ORG_MEMBERS_ACCESS: ${{ secrets.ORG_MEMBERS_ACCESS }}
+      POSTHOG_OWNER_EMAIL: ${{ secrets.POSTHOG_OWNER_EMAIL }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
