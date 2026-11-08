@@ -1,12 +1,9 @@
-data "posthog_user" "administrator" {
-  email = var.administrator_email
-}
+# org/organization-member-access/posthog keeps each person's level now. `removed`
+# with `destroy = false`, so the person stays in the organization.
+removed {
+  from = posthog_organization_member.administrator
 
-# retain_on_destroy: by default, destroying this resource removes the person
-# from the organization. Taking it out of Terraform should stop managing their
-# level, not lock them out.
-resource "posthog_organization_member" "administrator" {
-  user_uuid         = data.posthog_user.administrator.uuid
-  level             = "admin"
-  retain_on_destroy = true
+  lifecycle {
+    destroy = false
+  }
 }

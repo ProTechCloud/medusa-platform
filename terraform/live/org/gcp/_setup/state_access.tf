@@ -25,6 +25,11 @@ locals {
     cloudflare-stg = { prefix = "stg/cloudflare/", plan = local.cloudflare_plan_entries, apply = local.cloudflare_apply_entries.stg }
     cloudflare-prd = { prefix = "prd/cloudflare/", plan = local.cloudflare_plan_entries, apply = local.cloudflare_apply_entries.prd }
     posthog-org    = { prefix = "org/posthog/live/", plan = local.posthog_plan_entries, apply = local.posthog_apply_entries }
+
+    # Applied on demand and never planned on a pull request: its plan needs the
+    # member list, which lives in its environment. The GCP root's state goes
+    # through the bootstrap admin instead.
+    posthog-member-access = { prefix = "org/organization-member-access/posthog/", plan = [], apply = local.member_access_posthog_apply_entries }
   }
 
   direct_plan = merge([

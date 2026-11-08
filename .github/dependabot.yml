@@ -36,6 +36,8 @@ updates:
       - /terraform/live/org/gcp/_setup
       - /terraform/live/org/cloudflare
       - /terraform/live/org/cloudflare/_setup
+      - /terraform/live/org/organization-member-access/gcp
+      - /terraform/live/org/organization-member-access/posthog
       - /terraform/live/stg/gcp
       - /terraform/live/stg/gcp/_setup
       - /terraform/live/stg/cloudflare

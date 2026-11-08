@@ -7,33 +7,19 @@
 # `viewer` is the broad "see everything" role. It deliberately does not grant
 # secretmanager.versions.access, but it does grant enough adjacent permissions
 # that relying on that absence is a bet on Google never widening the role. The
-# deny policy below turns it into a guarantee.
+# deny policy in modules/gcp/member-access turns it into a guarantee.
+module "profiles" {
+  source = "../access-profiles"
+}
+
 resource "google_project_iam_member" "read_only" {
   project = var.project_id
-  role    = "roles/viewer"
+  role    = one(module.profiles.roles.read_only)
   member  = var.group
 }
 
-# Deny beats allow, always and everywhere. Even if someone later grants this
-# group secretAccessor by hand, reading a value stays refused until this
-# policy is edited — and editing it shows up as a diff here.
-resource "google_iam_deny_policy" "no_secret_values" {
-  parent       = urlencode("cloudresourcemanager.googleapis.com/projects/${var.project_id}")
-  name         = "medusa-developers-no-secret-values"
-  display_name = "Developers may see that a secret exists, never its value"
-
-  rules {
-    deny_rule {
-      denied_principals = [replace(var.group, "group:", "principalSet://goog/group/")]
-      denied_permissions = [
-        "secretmanager.googleapis.com/versions.access",
-      ]
-    }
-  }
-}
-
 # ---------- role 2: administration ----------
-# One named person, not a group, and deliberately not behind the deny above.
+# One named person, not a group, and deliberately not behind that deny.
 # Every change made outside CI therefore has exactly one owner, which is the
 # point: an incident asks "who did this", and the answer cannot be "somebody in
 # a group".
@@ -56,11 +42,7 @@ resource "google_iam_deny_policy" "no_secret_values" {
 # manages secrets but not their payloads. Owner would have included it, and a
 # recovery that needs the tunnel token should not start with granting it.
 resource "google_project_iam_member" "administration" {
-  for_each = toset([
-    "roles/editor",
-    "roles/resourcemanager.projectIamAdmin",
-    "roles/secretmanager.secretAccessor",
-  ])
+  for_each = toset(module.profiles.roles.administration)
 
   project = var.project_id
   role    = each.value
