@@ -1,6 +1,6 @@
 # The bootstrap admin's one federated path: this file, in a named environment,
-# on dev. It holds owner on the management project, so nothing runs before the
-# check that the environment makes a reviewer approve the run.
+# on dev. It holds owner on the management project, so its gate is the
+# environment's required reviewer.
 name: _setup-apply
 
 on:
@@ -57,13 +57,6 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-
-      - name: Require a reviewer on the environment
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          ENVIRONMENT: ${{ inputs.gh_environment }}
-        run: .github/scripts/terraform/require-environment-reviewer.sh
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:

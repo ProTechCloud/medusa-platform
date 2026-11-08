@@ -294,8 +294,8 @@ rotating it is the lever to pull if anything leaks.
 GitHub **environments** `stg`, `prd`, `cloudflare-org`, `posthog-org`, `setup` and
 `organization-member-access` must exist; their names are part of the trust rules, not labels.
 Each accepts deployments from `dev` only. `setup` and `organization-member-access` also need a
-required reviewer that bars self-review, with administrator bypass off, because the applies in
-them refuse to run otherwise.
+required reviewer. The applies in them no longer check that the environment bars self-review or
+administrator bypass, so a reviewer may approve a run they started.
 
 ### 5. Fill in the secret values
 
