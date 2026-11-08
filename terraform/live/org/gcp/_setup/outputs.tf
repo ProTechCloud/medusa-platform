@@ -53,7 +53,12 @@ output "apply_hubs" {
 
 output "tunnel_token_hubs" {
   description = "Tunnel-token hub per environment. Separate hubs: a shared one would let one environment's deploy write another's secret."
-  value       = { for k, m in module.tunnel_token_hub : k => m.email }
+  value       = { for k, h in google_service_account.tunnel_token_hub : k => h.email }
+}
+
+output "tunnel_token_hub_names" {
+  description = "Full resource name of each tunnel-token hub, for the bindings that hold its trust rule."
+  value       = { for k, h in google_service_account.tunnel_token_hub : k => h.name }
 }
 
 output "posthog_token_writer" {
@@ -61,6 +66,46 @@ output "posthog_token_writer" {
   value       = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.apply_entry/${one(local.posthog_apply_entries)}"
 }
 
+output "setup_plan" {
+  description = "Service account the _setup roots are planned as."
+  value       = google_service_account.setup_plan.email
+}
+
+output "setup_plan_principal" {
+  description = "The setup plan identity, in the form IAM deny policies expect."
+  value       = "principal://iam.googleapis.com/projects/-/serviceAccounts/${google_service_account.setup_plan.email}"
+}
+
+output "bootstrap_admin" {
+  description = "Service account _setup-apply.yml runs as."
+  value       = local.bootstrap_admin
+}
+
+output "plan_store_bucket" {
+  description = "Bucket the plan workflows upload the full plan to."
+  value       = module.plan_store.name
+}
+
 output "backend_deploy_hub" {
-  value = module.backend_deploy_hub.email
+  value = google_service_account.backend_deploy_hub.email
+}
+
+output "backend_deploy_hub_name" {
+  description = "Full resource name of the backend deploy hub, for the binding that holds its trust rule."
+  value       = google_service_account.backend_deploy_hub.name
+}
+
+output "hub_trust_role" {
+  description = "Custom role that lets an apply spoke set who may become a hub."
+  value       = google_project_iam_custom_role.hub_trust_editor.id
+}
+
+output "platform_repository" {
+  description = "owner/name of this repository, as the trust rules spell it."
+  value       = local.platform_repo
+}
+
+output "backend_repository" {
+  description = "owner/name of the application repository, as the trust rules spell it."
+  value       = local.backend_repo
 }

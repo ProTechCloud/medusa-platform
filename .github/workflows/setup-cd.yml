@@ -1,0 +1,70 @@
+name: setup-cd
+
+# org first, because stg and prd read its outputs. `.github/scripts/terraform/**`
+# is here because a change to how Terraform runs should be proven by a run. Keep
+# these paths equal to the ones in the setup-first job of _gcp-live-apply.yml.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - terraform/live/org/gcp/_setup/**
+      - terraform/live/stg/gcp/_setup/**
+      - terraform/live/prd/gcp/_setup/**
+      - terraform/modules/gcp/developer-access/**
+      - terraform/modules/gcp/plan-store/**
+      - terraform/modules/gcp/project/**
+      - terraform/modules/gcp/project-pin/**
+      - terraform/modules/gcp/state-bucket/**
+      - terraform/modules/gcp/wif-hub/**
+      - terraform/modules/gcp/wif-spoke/**
+      - .github/scripts/terraform/**
+  workflow_dispatch:
+
+concurrency:
+  group: setup-cd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  org:
+    name: apply org setup
+    uses: ./.github/workflows/_setup-apply.yml
+    with:
+      stack: org
+      gh_environment: setup
+      root: terraform/live/org/gcp/_setup
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+
+  stg:
+    name: apply stg setup
+    needs: org
+    uses: ./.github/workflows/_setup-apply.yml
+    with:
+      stack: stg
+      gh_environment: setup
+      root: terraform/live/stg/gcp/_setup
+      project_id: ${{ vars.GCP_PROJECT_STG }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+
+  prd:
+    name: apply prd setup
+    needs: stg
+    uses: ./.github/workflows/_setup-apply.yml
+    with:
+      stack: prd
+      gh_environment: setup
+      root: terraform/live/prd/gcp/_setup
+      project_id: ${{ vars.GCP_PROJECT_PRD }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read

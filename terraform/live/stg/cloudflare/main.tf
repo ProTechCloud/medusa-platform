@@ -5,21 +5,3 @@ locals {
   # free; Advanced Certificate Manager is not.
   hostname = "api-${var.environment}-medusa.${var.domain}"
 }
-
-module "tunnel" {
-  source = "../../../modules/cloudflare/tunnel"
-
-  account_id = var.account_id
-  name       = "medusa-${var.environment}"
-  hostname   = local.hostname
-  app_port   = var.app_port
-}
-
-module "dns" {
-  source = "../../../modules/cloudflare/dns-record"
-
-  zone_id  = var.zone_id
-  hostname = local.hostname
-  target   = module.tunnel.cname_target
-  comment  = "medusa ${var.environment} — managed by terraform"
-}

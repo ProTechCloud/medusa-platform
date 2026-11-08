@@ -26,6 +26,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
       - name: Cancel older runs of this workflow for this PR
         shell: bash
         env:
@@ -33,28 +37,7 @@ jobs:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.head_ref }}
           THIS_RUN: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          stale=$(gh run list --repo "$REPO" --workflow=code-quality.yml \
-                    --branch "$BRANCH" --json databaseId,status \
-                    --jq '.[] | select(.status=="in_progress" or .status=="queued") | .databaseId' \
-                  | grep -v "^${THIS_RUN}$" || true)
-          [ -z "$stale" ] && { echo "nothing to cancel"; exit 0; }
-
-          for id in $stale; do
-            echo "cancelling $id"
-            gh run cancel "$id" --repo "$REPO" || true
-          done
-
-          sleep 20
-
-          for id in $stale; do
-            state=$(gh run view "$id" --repo "$REPO" --json status --jq .status 2>/dev/null || echo gone)
-            if [ "$state" = "in_progress" ] || [ "$state" = "queued" ]; then
-              echo "still alive, forcing $id"
-              gh api -X POST "repos/$REPO/actions/runs/$id/force-cancel" || true
-            fi
-          done
+        run: .github/scripts/workflows/cancel-stale-runs.sh
 
   # Which roots to validate. Everything when a shared module changes, because
   # a module edit can break a root whose own files were untouched — and
@@ -72,27 +55,11 @@ jobs:
 
       - id: pick
         shell: bash
-        run: |
-          set -euo pipefail
-          all=$(find terraform/live -name versions.tf -exec dirname {} \; | sort)
-
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            chosen="$all"
-          else
-            changed=$(git diff --name-only \
-              "${{ github.event.pull_request.base.sha }}" \
-              "${{ github.event.pull_request.head.sha }}")
-            if echo "$changed" | grep -q "^terraform/modules/"; then
-              chosen="$all"
-            else
-              chosen=$(for r in $all; do echo "$changed" | grep -q "^$r/" && echo "$r"; done || true)
-            fi
-          fi
-
-          # An empty matrix makes the job vanish, and a vanished required check
-          # reads as passed. One no-op entry keeps the job reporting.
-          [ -z "$chosen" ] && chosen="none"
-          echo "roots=$(echo "$chosen" | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/workflows/pick-roots.sh
 
   format:
     name: terraform fmt
@@ -137,16 +104,12 @@ jobs:
       - name: Validate
         if: matrix.root != 'none'
         working-directory: ${{ matrix.root }}
-        run: |
-          terraform init -backend=false -input=false
-          terraform validate
+        run: ${{ github.workspace }}/.github/scripts/terraform/validate.sh
 
       - name: tflint
         if: matrix.root != 'none'
         working-directory: ${{ matrix.root }}
-        run: |
-          tflint --init --config="$GITHUB_WORKSPACE/.tflint.hcl"
-          tflint --config="$GITHUB_WORKSPACE/.tflint.hcl" --minimum-failure-severity=warning
+        run: ${{ github.workspace }}/.github/scripts/terraform/tflint.sh
 
   actionlint:
     name: actionlint
@@ -159,32 +122,26 @@ jobs:
 
       - id: scope
         shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          changed=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}")
-          echo "$changed" | grep -q "^\.github/" \
-            && echo "relevant=true" >> "$GITHUB_OUTPUT" \
-            || echo "relevant=false" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PATTERN: ^\.github/
+        run: .github/scripts/pull-request/stack-touched.sh
 
       # Checksum-verified binary rather than an action: one less third-party
       # action to pin, audit and trust with the workflow token.
       - name: Run actionlint
         if: steps.scope.outputs.relevant == 'true'
         shell: bash
-        run: |
-          set -euo pipefail
-          base="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
-          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -sSfLO "$base/$tarball"
-          curl -sSfL "$base/actionlint_${ACTIONLINT_VERSION}_checksums.txt" \
-            | grep " $tarball\$" | sha256sum -c -
-          tar -xzf "$tarball" actionlint
-          ./actionlint -color
+        run: .github/scripts/workflows/run-actionlint.sh
+
+      # actionlint only reads what is inline in a workflow, so the scripts it runs
+      # get their own pass. The runner image ships shellcheck.
+      - name: Run shellcheck
+        if: steps.scope.outputs.relevant == 'true'
+        shell: bash
+        run: shellcheck .github/scripts/*/*.sh
 
   gitleaks:
     name: gitleaks
@@ -199,27 +156,17 @@ jobs:
       # for organisation repositories.
       - name: Install gitleaks
         shell: bash
-        run: |
-          set -euo pipefail
-          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
-          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfLO "$base/$tarball"
-          curl -sSfL "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" \
-            | grep " $tarball\$" | sha256sum -c -
-          tar -xzf "$tarball" gitleaks
-          sudo mv gitleaks /usr/local/bin/
+        run: .github/scripts/workflows/install-gitleaks.sh
 
       # A pull request scans its own commits; a merge rescans everything,
       # because a secret can arrive through a path no single diff shows.
       - name: Scan
         shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            gitleaks git --redact --verbose \
-              --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
-          else
-            gitleaks git --redact --verbose
-          fi
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/workflows/gitleaks-scan.sh
 
   # Misconfiguration scanning over the Terraform, separate from tflint: tflint
   # judges the code, trivy judges what the code would build. A public bucket is
@@ -238,27 +185,14 @@ jobs:
       # with no commit to explain it.
       - name: Install trivy
         shell: bash
-        run: |
-          set -euo pipefail
-          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
-          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          curl -sSfLO "$base/$tarball"
-          curl -sSfL "$base/trivy_${TRIVY_VERSION}_checksums.txt" \
-            | grep " $tarball\$" | sha256sum -c -
-          tar -xzf "$tarball" trivy
-          sudo mv trivy /usr/local/bin/
+        run: .github/scripts/workflows/install-trivy.sh
 
       # --exit-code 1 with --severity HIGH,CRITICAL: anything lower is
       # reported and does not block, so the gate stays worth reading.
       # Exceptions live in .trivyignore.yaml, never in a flag here.
       - name: Scan the Terraform
         shell: bash
-        run: |
-          set -euo pipefail
-          trivy config terraform/ \
-            --severity HIGH,CRITICAL \
-            --exit-code 1 \
-            --ignorefile .trivyignore.yaml
+        run: .github/scripts/workflows/trivy-scan.sh
 
 
   # The only check branch protection needs to require. GitHub counts a check
@@ -268,22 +202,15 @@ jobs:
   summary:
     name: Code Quality Summary
     if: always()
-    needs: [format, validate, actionlint, gitleaks, trivy]
+    needs: [discover, format, validate, actionlint, gitleaks, trivy]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
       - name: Require every check to have passed
         shell: bash
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          echo "$RESULTS"
-          failed=$(echo "$RESULTS" | jq -r '
-            to_entries[]
-            | select(.value.result != "success" and .value.result != "skipped")
-            | .key')
-          if [ -n "$failed" ]; then
-            echo "::error::failed or timed out: $(echo "$failed" | tr '\n' ' ')"
-            exit 1
-          fi
-          echo "all checks passed"
+        run: .github/scripts/workflows/require-all-passed.sh

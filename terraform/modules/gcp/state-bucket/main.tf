@@ -105,3 +105,12 @@ resource "google_storage_bucket" "state" {
 
   depends_on = [google_kms_crypto_key_iam_member.gcs_agent]
 }
+
+# A new bucket gives project viewers this role, which reads every object. The
+# plan spokes hold roles/viewer, so without this they would read state outside
+# the grants that name them. Empty and authoritative, so it stays that way.
+resource "google_storage_bucket_iam_binding" "no_legacy_object_reader" {
+  bucket  = google_storage_bucket.state.name
+  role    = "roles/storage.legacyObjectReader"
+  members = []
+}
