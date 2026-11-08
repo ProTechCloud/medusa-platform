@@ -2,22 +2,17 @@
 # Applied on demand, behind a reviewer, because a wrong list can lock a person
 # out.
 
-locals {
-  # administration is what developer-access gives the administrator: owner
-  # without deleting the project or moving its billing, and able to read a secret
-  # during a recovery. logs is for a person who needs nothing else.
-  profile_roles = {
-    read_only      = ["roles/viewer"]
-    administration = ["roles/editor", "roles/resourcemanager.projectIamAdmin", "roles/secretmanager.secretAccessor"]
-    logs           = ["roles/logging.viewer"]
-  }
+module "profiles" {
+  source = "../access-profiles"
+}
 
+locals {
   # Keyed by handle and role, which say nothing about who the person is. The
   # addresses stay sensitive, so they do not reach the run's log.
   grants = nonsensitive(toset(flatten([
     for handle, member in var.members : [
       for profile in member.profiles : [
-        for role in local.profile_roles[profile] : "${handle}|${role}"
+        for role in module.profiles.roles[profile] : "${handle}|${role}"
       ]
     ]
   ])))

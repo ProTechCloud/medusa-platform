@@ -63,7 +63,8 @@ jobs:
 
     environment:
       name: ${{ inputs.gh_environment }}
-      deployment: false
+      # The reviewer holds this job only when it creates a deployment.
+      deployment: ${{ !inputs.requires_reviewer }}
 
     concurrency:
       group: apply-posthog-${{ inputs.stack }}

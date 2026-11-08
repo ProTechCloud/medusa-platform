@@ -8,9 +8,13 @@
 # secretmanager.versions.access, but it does grant enough adjacent permissions
 # that relying on that absence is a bet on Google never widening the role. The
 # deny policy in modules/gcp/member-access turns it into a guarantee.
+module "profiles" {
+  source = "../access-profiles"
+}
+
 resource "google_project_iam_member" "read_only" {
   project = var.project_id
-  role    = "roles/viewer"
+  role    = one(module.profiles.roles.read_only)
   member  = var.group
 }
 
@@ -38,11 +42,7 @@ resource "google_project_iam_member" "read_only" {
 # manages secrets but not their payloads. Owner would have included it, and a
 # recovery that needs the tunnel token should not start with granting it.
 resource "google_project_iam_member" "administration" {
-  for_each = toset([
-    "roles/editor",
-    "roles/resourcemanager.projectIamAdmin",
-    "roles/secretmanager.secretAccessor",
-  ])
+  for_each = toset(module.profiles.roles.administration)
 
   project = var.project_id
   role    = each.value
