@@ -83,6 +83,9 @@ module "apply_spoke" {
     { role = "roles/secretmanager.admin" },
     { role = "roles/iap.admin" },
     { role = "roles/serviceusage.serviceUsageAdmin" },
+    { role = "roles/run.admin" },
+    { role = "roles/certificatemanager.editor" },
+    { role = "roles/monitoring.editor" },
 
     # Project-level bindings are part of applying the stack (the instance
     # needs logWriter), but projectIamAdmin unconditionally would let the

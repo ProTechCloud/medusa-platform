@@ -40,6 +40,11 @@ output "instance_service_account" {
   value       = google_service_account.instance.email
 }
 
+output "api_service_account" {
+  description = "Identity the Cloud Run service runs as. Created here so the apply spoke never needs serviceAccountAdmin."
+  value       = google_service_account.api.email
+}
+
 output "workload_identity_pool" {
   description = "Passed through from org/gcp/_setup: the workload root reads only this root's outputs."
   value       = local.org.workload_identity_pool
