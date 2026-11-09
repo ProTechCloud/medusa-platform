@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.8"
+    }
   }
 
   # Workload state lives in the environment's own bucket, not the management
@@ -25,5 +29,15 @@ provider "google" {
   # its single right is to become this spoke. Without this line Terraform runs
   # as the hub and fails on the first API call, in a way that reads like a
   # missing role rather than a missing hop.
+  impersonate_service_account = var.spoke_service_account
+}
+
+# The Cloud Run service needs a field only this provider has. It makes the same
+# hop to the spoke as the provider above.
+provider "google-beta" {
+  project = var.project_id
+  region  = var.region
+  zone    = var.zone
+
   impersonate_service_account = var.spoke_service_account
 }

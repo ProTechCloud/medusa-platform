@@ -5,7 +5,7 @@ module "posthog_project_token" {
   source = "../../../modules/gcp/secret"
 
   project_id  = var.project_id
-  environment = var.environment
+  environment = module.shared.environment
   domain      = "posthog"
   name        = "posthog-project-token"
   location    = var.region
@@ -19,4 +19,11 @@ resource "google_secret_manager_secret_iam_member" "posthog_writer_adds_versions
   secret_id = module.posthog_project_token.secret_id
   role      = "roles/secretmanager.secretVersionAdder"
   member    = local.setup.posthog_token_writer
+}
+
+resource "google_secret_manager_secret_iam_member" "api_reads_posthog_token" {
+  project   = var.project_id
+  secret_id = module.posthog_project_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.setup.api_service_account}"
 }

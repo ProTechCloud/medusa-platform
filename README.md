@@ -16,6 +16,7 @@ terraform/
     stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
     stg/gcp                   the stg infrastructure
     stg/cloudflare            stg tunnel and DNS
+    stg/shared                the stg name, zone and hostnames, no state of its own
     prd/…                     the same: prd/gcp/_setup is applied by setup-cd, the rest planned but never applied
   modules/
     gcp/…  cloudflare/…       shared code, no state of its own
@@ -23,9 +24,26 @@ terraform/
 
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
 
-In every root, `main.tf` holds only the wiring: the root-wide locals. A read of another
+In every root, `main.tf` holds only the wiring: the shared values and the root-wide locals. A read of another
 root's outputs stays in `remote_state.tf`. Every other block sits in a sibling file named for
 it, and a root with no wiring has no `main.tf`.
+
+## Shared values
+
+What every root of an environment agrees on (its name, zone, API hostname and labels) comes
+from `modules/naming`, called once in `live/<env>/shared`. That root has no provider and no
+state; the `gcp` roots call it as `module "shared"`, and the `cloudflare` roots do not yet.
+Nothing in it is secret.
+
+## Crossing roots
+
+No repository variable ever carries a Terraform output to another root. A root that needs
+another's output reads it from the management bucket. The GCP root writes
+`<env>/cloudflare/handoff/gcp-<hash>.json`, named by the first 16 hex digits of its content's
+SHA-256, with the load balancer's address, certificate authorization records keyed by full
+hostname, and `published_hosts`, which lists full hostnames such as
+`api.stg.medusa.fabianalula.site`. A host joins that list once it serves TLS and stays, so a
+certificate renewal never takes its record down.
 
 ## How CI reaches a cloud
 
@@ -485,8 +503,8 @@ and leaves them in the organization.
 
 | Workflow | When | What |
 |---|---|---|
-| `live-plan` | every PR | plans all nine stacks; changes under `.github/scripts/terraform/` also trigger the GCP, Cloudflare, PostHog and setup plans. `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. A plan is never red because of the store: a failed upload is a warning, and the section then has no link. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
-| `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary** |
+| `live-plan` | every PR | plans all nine stacks; changes under `.github/scripts/terraform/` also trigger the GCP, Cloudflare, PostHog and setup plans, and changes under `live/<env>/shared/` also trigger that environment's GCP plan. `Plan stg`, `Plan prd` and the three `Plan … setup` always report, the Cloudflare and PostHog stacks only when touched. Each section links the full `plan.txt` in the plan store, which opens for a signed-in developer. A plan is never red because of the store: a failed upload is a warning, and the section then has no link. One comment, a section per stack — a stack whose plan failed is named, one out of scope gets no section, and the comment is deleted when no stack has a section at all |
+| `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary**. A change under `terraform/modules/` or `live/<env>/shared/` validates every root |
 | `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
 | `setup-cd` | merge to `dev` touching a GCP `_setup` root, a module it sources or `.github/scripts/terraform/**` | applies org, then stg, then prd, each after a required reviewer approves in the `setup` environment. `TF_APPLY_ENABLE_PRD` does not gate it: `prd/gcp/_setup` holds identities and access, not the workload |
 | `stg-cd` | merge to `dev` | only the GCP apply waits for `setup-cd` when the push touched its paths; failed or cancelled setup runs block that apply, even for an older commit. Cloudflare runs in parallel and can apply while setup approval is pending or after setup fails. The tunnel token is written only after both applies succeed |
