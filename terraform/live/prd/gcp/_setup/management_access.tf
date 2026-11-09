@@ -59,3 +59,37 @@ resource "google_storage_bucket_iam_member" "plan_writes_plan_store" {
     expression  = "resource.name.startsWith('projects/_/buckets/${local.org.plan_store_bucket}/objects/plan/gcp-${var.environment}/')"
   }
 }
+
+# What the Cloudflare root needs from the workload root crosses as an object in
+# the management bucket. Only this environment's handoff objects: the plan spoke
+# reads them and the apply spoke replaces them.
+resource "google_storage_bucket_iam_member" "apply_writes_handoff" {
+  bucket = var.management_state_bucket
+  role   = "roles/storage.objectAdmin"
+  member = module.apply_spoke.member
+
+  condition {
+    title       = "only this environment's gcp handoff"
+    description = "Objects under ${var.environment}/cloudflare/handoff/gcp and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${var.management_state_bucket}/objects/${var.environment}/cloudflare/handoff/gcp')"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "plan_reads_handoff" {
+  bucket = var.management_state_bucket
+  role   = "roles/storage.objectViewer"
+  member = module.plan_spoke.member
+
+  condition {
+    title       = "only this environment's gcp handoff"
+    description = "Objects under ${var.environment}/cloudflare/handoff/gcp and nothing else."
+    expression  = "resource.name.startsWith('projects/_/buckets/${var.management_state_bucket}/objects/${var.environment}/cloudflare/handoff/gcp')"
+  }
+}
+
+# Both spokes already decrypt with this key. Writing the handoff also encrypts.
+resource "google_kms_crypto_key_iam_member" "apply_encrypts_management" {
+  crypto_key_id = local.org.management_state_key
+  role          = "roles/cloudkms.cryptoKeyEncrypter"
+  member        = module.apply_spoke.member
+}

@@ -89,5 +89,8 @@ variable "apis" {
     "cloudkms.googleapis.com",
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "run.googleapis.com",
+    "certificatemanager.googleapis.com",
+    "monitoring.googleapis.com",
   ]
 }
