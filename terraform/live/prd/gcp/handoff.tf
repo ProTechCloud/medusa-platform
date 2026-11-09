@@ -3,7 +3,7 @@
 # hostname, the CNAME that proves it to Certificate Manager. One object, so the
 # Cloudflare root never sees one value without the other.
 #
-# `published_hosts` names the hostnames whose A record the Cloudflare root
+# `published_hosts` lists the full hostnames whose A record the Cloudflare root
 # publishes. Each joins once it serves TLS and stays, so a renewal that shows
 # its certificate as provisioning again never takes its record down.
 #

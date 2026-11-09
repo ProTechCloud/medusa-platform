@@ -4,9 +4,9 @@ output "ip_address" {
 }
 
 output "dns_authorization_records" {
-  description = "Per backend, the CNAME that proves control of its host to Certificate Manager. Publish it before the hostname itself."
+  description = "Per hostname, the CNAME that proves control of it to Certificate Manager. Publish it before the hostname itself."
   value = {
-    for key, auth in google_certificate_manager_dns_authorization.this : key => {
+    for key, auth in google_certificate_manager_dns_authorization.this : var.backends[key].host => {
       name = auth.dns_resource_record[0].name
       type = auth.dns_resource_record[0].type
       data = auth.dns_resource_record[0].data
@@ -25,9 +25,9 @@ output "url_map_name" {
 }
 
 output "serving_hosts" {
-  description = "The backends that serve TLS now: their certificate is issued and its map entry is active. A new host's are still provisioning on the apply that creates them, and a renewal can show a certificate as provisioning again."
+  description = "The hostnames that serve TLS now: their certificate is issued and its map entry is active. A new host's are still provisioning on the apply that creates them, and a renewal can show a certificate as provisioning again."
   value = [
-    for key, cert in google_certificate_manager_certificate.this : key
+    for key, cert in google_certificate_manager_certificate.this : var.backends[key].host
     if cert.managed[0].state == "ACTIVE" && google_certificate_manager_certificate_map_entry.this[key].state == "ACTIVE"
   ]
 }
