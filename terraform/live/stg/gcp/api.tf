@@ -26,7 +26,7 @@ module "api_service" {
   name                  = "${local.name}-api"
   region                = var.region
   service_account_email = local.setup.api_service_account
-  image                 = "gcr.io/google-samples/hello-app:1.0"
+  image                 = "gcr.io/google-samples/hello-app@sha256:649188051906c9df7f87fb2ef04a21acbdb009c0877fa67b3132b83230411f6e" # hello-app:1.0
   env = {
     APP_ENV                 = module.shared.environment
     POSTHOG_HOST            = "https://us.i.posthog.com"
