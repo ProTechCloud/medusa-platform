@@ -45,8 +45,8 @@ added without showing as a diff here.
 Two identities take the pool straight to a service account, with no hub or spoke, on purpose.
 The setup plan reads all three projects, so there is no one environment for a spoke to live
 in; it holds only reads. The bootstrap admin is the identity that creates the hubs and spokes,
-so it cannot sit behind them; only `_setup-apply.yml` reaches it, in an environment whose
-required reviewer it checks first.
+so it cannot sit behind them; only `_setup-apply.yml` reaches it, in an environment with a
+required reviewer.
 
 Three places must be told to make the second hop, because they authenticate separately:
 the `google` provider, the `gcs` backend at `init`, and each `terraform_remote_state`.
@@ -494,10 +494,9 @@ and leaves them in the organization.
 | `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
 | `organization-member-access-cd` | by hand from `dev` | applies the member list to GCP and PostHog, after a required reviewer approves in the `organization-member-access` environment |
 
-Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Code Quality Summary`,
-`Review — Claude` and `Quality — PR Template`. `Plan org setup / plan`, `Plan stg setup / plan`
-and `Plan prd setup / plan` join them once the pull request that adds them has merged, because
-requiring them earlier would hold every open pull request.
+Branch protection requires `Plan stg / plan`, `Plan prd / plan`, `Plan org setup / plan`,
+`Plan stg setup / plan`, `Plan prd setup / plan`, `Code Quality Summary` and
+`Quality — PR Template`.
 A check that never runs counts as passed, which is why the plan jobs always run and why the
 summary job exists at all.
 
