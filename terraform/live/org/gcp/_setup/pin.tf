@@ -1,6 +1,7 @@
-# _setup roots are applied by a person with the bootstrap admin identity, so a
-# human credential is accepted here. Every CI root leaves this false, which is
-# what makes a laptop-run of a CI root fail instead of quietly succeeding.
+# setup-cd applies this root, but the first apply and an emergency are run by a
+# person with the bootstrap admin identity, so a human credential is accepted
+# here. Every workload root leaves this false, which is what makes a laptop-run
+# of one fail instead of quietly succeeding.
 module "pin" {
   source = "../../../../modules/gcp/project-pin"
 
