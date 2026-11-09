@@ -6,7 +6,7 @@ module "tunnel_token" {
   source = "../../../modules/gcp/secret"
 
   project_id  = var.project_id
-  environment = var.environment
+  environment = module.shared.environment
   domain      = "cloudflare"
   name        = "tunnel-token"
   location    = var.region

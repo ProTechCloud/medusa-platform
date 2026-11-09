@@ -16,6 +16,7 @@ terraform/
     stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
     stg/gcp                   the stg infrastructure
     stg/cloudflare            stg tunnel and DNS
+    stg/shared                the stg name, zone and hostnames, no state of its own
     prd/…                     the same: prd/gcp/_setup is applied by setup-cd, the rest planned but never applied
   modules/
     gcp/…  cloudflare/…       shared code, no state of its own
@@ -23,9 +24,24 @@ terraform/
 
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
 
-In every root, `main.tf` holds only the wiring: the root-wide locals. A read of another
+In every root, `main.tf` holds only the wiring: the shared values and the root-wide locals. A read of another
 root's outputs stays in `remote_state.tf`. Every other block sits in a sibling file named for
 it, and a root with no wiring has no `main.tf`.
+
+## Shared values
+
+What every root of an environment agrees on (its name, zone, API hostname and labels) comes
+from `modules/naming`, called once in `live/<env>/shared`. That root has no provider and no
+state; each workload root calls it as `module "shared"`. Nothing in it is secret.
+
+## Crossing roots
+
+No repository variable ever carries a Terraform output to another root. A root that needs
+another's output reads it from the management bucket. The GCP root writes
+`<env>/cloudflare/handoff/gcp-<hash>.json`, named by the first 16 hex digits of its content's
+SHA-256, with the load balancer's address, each hostname's certificate authorization record
+and `published_hosts`. A host joins that list once it serves TLS and stays, so a certificate
+renewal never takes its record down.
 
 ## How CI reaches a cloud
 

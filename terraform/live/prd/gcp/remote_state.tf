@@ -3,7 +3,7 @@ data "terraform_remote_state" "setup" {
 
   config = {
     bucket = var.management_state_bucket
-    prefix = "${var.environment}/gcp/setup"
+    prefix = "${module.shared.environment}/gcp/setup"
 
     # The backend authenticates on its own, outside the provider, so it does
     # not inherit the provider's impersonation and has to be told separately.
