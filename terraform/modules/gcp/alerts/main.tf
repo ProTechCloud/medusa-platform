@@ -147,7 +147,7 @@ resource "google_monitoring_alert_policy" "instances_at_max" {
 
   documentation {
     mime_type = "text/markdown"
-    content   = "The service cannot add instances. Raise `max_instances` or the per-instance CPU, after checking that the load is legitimate (Cloud Armor logs)."
+    content   = "The service cannot add instances. Raise `max_instances` or the per-instance CPU, after checking that the load is legitimate (the load balancer's request logs)."
   }
 
   alert_strategy {
