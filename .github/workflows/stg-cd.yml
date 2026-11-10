@@ -37,10 +37,12 @@ jobs:
       id-token: write
       actions: read
 
-  # Runs beside the GCP apply, not after it. The two touch different systems
-  # and neither reads the other's output during the run.
+  # After the GCP apply, and only once it succeeded: this root reads the
+  # handoff object that apply writes, so a run beside it would publish from
+  # the previous one.
   cloudflare:
     name: apply stg cloudflare
+    needs: gcp
     uses: ./.github/workflows/_cloudflare-live-apply.yml
     with:
       stack: stg

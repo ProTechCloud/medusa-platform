@@ -4,18 +4,13 @@ variable "account_id" {
 }
 
 variable "zone_id" {
-  description = "Cloudflare zone the DNS record is published in."
+  description = "Cloudflare zone the DNS records are published in."
   type        = string
 }
 
-variable "domain" {
-  description = "Zone apex, e.g. `example.site`."
+variable "management_state_bucket" {
+  description = "The management bucket, where the GCP root's handoff object for this one is (handoff.tf)."
   type        = string
-}
-
-variable "environment" {
-  type    = string
-  default = "stg"
 }
 
 variable "app_port" {

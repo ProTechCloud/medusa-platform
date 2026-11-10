@@ -25,15 +25,15 @@ terraform/
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
 
 In every root, `main.tf` holds only the wiring: the shared values and the root-wide locals. A read of another
-root's outputs stays in `remote_state.tf`. Every other block sits in a sibling file named for
-it, and a root with no wiring has no `main.tf`.
+root's state (`terraform_remote_state`) stays in `remote_state.tf`; a read of a handoff object
+another root wrote for this one stays in `handoff.tf` (see "Crossing roots"). Every other block
+sits in a sibling file named for it, and a root with no wiring has no `main.tf`.
 
 ## Shared values
 
 What every root of an environment agrees on (its name, zone, API hostname and labels) comes
 from `modules/naming`, called once in `live/<env>/shared`. That root has no provider and no
-state; the `gcp` roots call it as `module "shared"`, and the `cloudflare` roots do not yet.
-Nothing in it is secret.
+state; the `gcp` and `cloudflare` roots call it as `module "shared"`. Nothing in it is secret.
 
 ## Crossing roots
 
@@ -44,6 +44,12 @@ SHA-256, with the load balancer's address, certificate authorization records key
 hostname, and `published_hosts`, which lists full hostnames such as
 `api.stg.medusa.fabianalula.site`. A host joins that list once it serves TLS and stays, so a
 certificate renewal never takes its record down.
+
+The Cloudflare root of the same environment reads that object (`handoff.tf`) and publishes,
+DNS-only, the certificate authorization as soon as the object exists and the API's A record once
+`published_hosts` lists its hostname. Two current objects fail its plan; none publishes nothing.
+In `stg-cd` and `prd-cd` the Cloudflare apply runs after the GCP apply, and only once it
+succeeded, so it never reads a handoff older than the run.
 
 ## How CI reaches a cloud
 
@@ -255,7 +261,7 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `GCP_PLAN_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `plan_spoke` |
 | `GCP_APPLY_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `apply_spoke` |
 | `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
-| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_DOMAIN` | Cloudflare dashboard |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID` | Cloudflare dashboard |
 | `POSTHOG_ORGANIZATION_ID` | PostHog → Settings → Organization → General |
 | `GCP_SETUP_PLAN` | `org/gcp/_setup` → `setup_plan` |
 | `GCP_BOOTSTRAP_ADMIN` | `org/gcp/_setup` → `bootstrap_admin` |
