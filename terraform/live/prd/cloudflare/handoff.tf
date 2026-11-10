@@ -25,6 +25,21 @@ data "google_storage_bucket_object_content" "handoff" {
 
   bucket = var.management_state_bucket
   name   = local.handoff_object
+
+  # This root's Cloudflare token can edit the whole zone, so what it publishes
+  # from the object is checked first: a bad value, from a bug or a compromised
+  # GCP apply, fails the plan instead of becoming a live record.
+  lifecycle {
+    postcondition {
+      condition     = endswith(trimsuffix(try(jsondecode(self.content).certificate_dns_authorizations[local.hostname].name, "_acme-challenge.${local.hostname}"), "."), ".${local.hostname}")
+      error_message = "The handoff's certificate authorization for ${local.hostname} must be named under that hostname."
+    }
+
+    postcondition {
+      condition     = can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", jsondecode(self.content).load_balancer_ip)) && can(cidrhost("${jsondecode(self.content).load_balancer_ip}/32", 0))
+      error_message = "The handoff's load_balancer_ip must be an IPv4 address."
+    }
+  }
 }
 
 locals {
