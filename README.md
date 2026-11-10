@@ -25,8 +25,9 @@ terraform/
 One root per scope and provider, one state each. No workspaces, no Terragrunt.
 
 In every root, `main.tf` holds only the wiring: the shared values and the root-wide locals. A read of another
-root's outputs stays in `remote_state.tf`. Every other block sits in a sibling file named for
-it, and a root with no wiring has no `main.tf`.
+root's state (`terraform_remote_state`) stays in `remote_state.tf`; a read of a handoff object
+another root wrote for this one stays in `handoff.tf` (see "Crossing roots"). Every other block
+sits in a sibling file named for it, and a root with no wiring has no `main.tf`.
 
 ## Shared values
 
