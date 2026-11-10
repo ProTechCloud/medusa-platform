@@ -57,7 +57,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PATTERN: >-
-            ^(${{inputs.root}}/|terraform/modules/cloudflare/|\.github/workflows/_cloudflare-live-plan\.yml$|\.github/scripts/terraform/)
+            ^(${{inputs.root}}/|terraform/live/${{inputs.stack}}/shared/|terraform/modules/cloudflare/|terraform/modules/naming/|\.github/workflows/_cloudflare-live-plan\.yml$|\.github/scripts/terraform/)
         run: .github/scripts/pull-request/stack-touched.sh
 
       # Deliberately not the minting token.
@@ -110,7 +110,7 @@ jobs:
         env:
           TF_VAR_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
-          TF_VAR_domain: ${{ vars.CLOUDFLARE_DOMAIN }}
+          TF_VAR_management_state_bucket: ${{ inputs.state_bucket }}
         run: ${{ github.workspace }}/.github/scripts/terraform/plan.sh
 
       - name: Put the full plan in the plan store

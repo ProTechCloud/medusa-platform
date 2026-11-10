@@ -1,5 +1,5 @@
 output "hostname" {
-  value = local.hostname
+  value = local.tunnel_hostname
 }
 
 output "tunnel_id" {
