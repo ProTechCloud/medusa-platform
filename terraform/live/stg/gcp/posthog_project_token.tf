@@ -1,4 +1,4 @@
-# The container only, like the tunnel token. The PostHog apply reads the
+# The container only. The PostHog apply reads the
 # project token from its own state and writes it here as a new version, so the
 # value never reaches this state file.
 module "posthog_project_token" {

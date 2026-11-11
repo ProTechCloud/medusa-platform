@@ -25,7 +25,7 @@
 # misconfigurations:
 #   - id: AVD-GCP-0066
 #     paths:
-#       - "terraform/modules/gcp/api-vm/network.tf"
+#       - "modules/gcp/<module>/<file>.tf"
 #     statement: >-
 #       The subnet has no flow logs. Nothing routes to it from outside and the
 #       only traffic is the tunnel connector reaching loopback, so the logs

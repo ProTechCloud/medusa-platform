@@ -62,7 +62,7 @@ GitHub OIDC ──▶ identity pool ──▶ HUB ──tokenCreator──▶ SP
 ```
 
 The hub is the entry point and holds nothing. An environment's apply spoke may also set who becomes
-that environment's deploy and tunnel-token hubs, and its plan spoke may read them. The spoke lives inside the environment it
+that environment's deploy hub, and its plan spoke may read it. The spoke lives inside the environment it
 changes and trusts exactly one hub, set authoritatively — a second path to it cannot be
 added without showing as a diff here.
 
@@ -106,8 +106,7 @@ match of the whole string — there is no wildcard anywhere.
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
-The backend deploy hub and the tunnel-token hubs keep their rules in the environment's
-workload root, in `trust.tf`, so renaming a deploy workflow is one ordinary apply there. The
+The backend deploy hub keeps its rule in the stg workload root, in `trust.tf`, so renaming a deploy workflow is one ordinary apply there. The
 other rules stay in `org/gcp/_setup`.
 
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
