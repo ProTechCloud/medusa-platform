@@ -401,27 +401,11 @@ holds `secretVersionAdder` on that one secret. `stg-cd` creates the secret on th
 so the step retries the write every 20 seconds for up to ten minutes until it exists. The only value the GCP roots write into
 state is the literal string `REPLACE_ME_VIA_SECRET_MANAGER`.
 
-**What the VM reads before the app starts.** `cloudflared.service` fetches the tunnel token,
-and `medusa-app.service` runs `/etc/medusa/write-app-env.sh` before every start. It writes
-`/var/lib/medusa/app.env`, readable by root alone, which the container gets with
-`--env-file`:
-
-| Variable | Value |
-|---|---|
-| `POSTHOG_HOST` | `https://us.i.posthog.com` |
-| `LOG_POSTHOG_LEVEL` | `warn` |
-| `LOG_STDOUT` | `true` |
-| `LOG_LEVEL` | `info` |
-| `OTEL_TRACES_SAMPLER_ARG` | `1` in stg, `0.1` in prd (`otel_traces_sampler_arg` in each `<env>/gcp`) |
-| `NODE_ENV` | `production` |
-| `POSTHOG_PROJECT_TOKEN` | the latest version of `medusa_<env>_posthog_posthog-project-token`, only when it is real |
-
-The token is optional: without it the API sends nothing to PostHog and runs the same. So
-the script never stops the start. It writes the fixed values, then adds the token only when
-Secret Manager answered within ten seconds with a value that is neither empty nor
-`REPLACE_ME_VIA_SECRET_MANAGER`; otherwise it logs one line saying the token is absent.
-Because the file is rewritten before every start, a restart picks up a new token version;
-`backend-cd` in `medusa-app` restarts the app.
+**What the API reads.** Its environment is set on the Cloud Run service in each
+`<env>/gcp/api.tf`. `POSTHOG_PROJECT_TOKEN` comes from the latest version of
+`medusa_<env>_posthog_posthog-project-token`, and only while `api_reads_posthog_project_token`
+is true: until the secret holds a real version it holds the placeholder, and the service
+would start with it.
 
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
@@ -439,7 +423,7 @@ under that prefix by one identity.
 
 > Secret Manager ids accept only `[a-zA-Z0-9_-]`, so the four-part name in the standard
 > cannot use `/`. The parts are kept and joined with `_`:
-> `medusa/stg/cloudflare/tunnel-token` → `medusa_stg_cloudflare_tunnel-token`.
+> `medusa/stg/posthog/posthog-project-token` → `medusa_stg_posthog_posthog-project-token`.
 
 ## Human access
 
@@ -448,7 +432,7 @@ Sign in with your Google account. No keys are issued, to anyone, anywhere.
 ```sh
 gcloud auth login
 gcloud config set project protech-medusa-stg
-gcloud compute instances list
+gcloud run services list --region us-central1
 ```
 
 Two roles, and nobody gets a shell:

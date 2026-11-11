@@ -2,8 +2,8 @@
 set -euo pipefail
 value=$(terraform output -raw project_api_token)
 
-# An empty output would become the latest version, and the VM reads
-# versions/latest.
+# An empty output would become the latest version, and the API's Cloud Run
+# service reads versions/latest.
 if [ -z "$value" ]; then
   echo "::error::terraform output project_api_token is empty. The secret was left untouched."
   exit 1
