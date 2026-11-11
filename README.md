@@ -15,7 +15,7 @@ terraform/
     org/organization-member-access/…  who may use GCP and PostHog, from one list
     stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
     stg/gcp                   the stg infrastructure
-    stg/cloudflare            stg tunnel and DNS
+    stg/cloudflare            stg DNS
     stg/shared                the stg name, zone and hostnames, no state of its own
     prd/…                     the same: prd/gcp/_setup is applied by setup-cd, the rest planned but never applied
   modules/
@@ -337,9 +337,8 @@ to the shell history, where it outlives the terminal and is readable by anything
 that can read the bootstrap account's home directory. `--data-file=-` with no
 pipe reads from the terminal instead.
 
-Two are the exception: `stg-cd` writes the tunnel token after each apply, and `org-cd`
-writes the PostHog project token to `medusa_stg_posthog_posthog-project-token` after each
-PostHog apply.
+One is the exception: `org-cd` writes the PostHog project token to
+`medusa_stg_posthog_posthog-project-token` after each PostHog apply.
 
 ### 6. PostHog
 
@@ -395,10 +394,8 @@ log lines — and is a filter in PostHog, not a second project to keep in step.
 ## Secrets and state
 
 **No secret value reaches a GCP state file.** Terraform creates secret containers, never
-their contents; the tunnel token is fetched from the Cloudflare API by the deploy job and
-written under an identity that can add a version to that one secret and cannot read it
-back. The PostHog project token takes the same path: `_posthog-live-apply.yml` reads it from
-the `org/posthog` state after the apply and adds it as a version of stg's
+their contents. The PostHog project token reaches its secret without passing through one:
+`_posthog-live-apply.yml` reads it from the `org/posthog` state after the apply and adds it as a version of stg's
 `medusa_stg_posthog_posthog-project-token`, as the federated identity of that apply, which
 holds `secretVersionAdder` on that one secret. `stg-cd` creates the secret on the same push,
 so the step retries the write every 20 seconds for up to ten minutes until it exists. The only value the GCP roots write into
@@ -513,7 +510,7 @@ and leaves them in the organization.
 | `code-quality` | every PR | fmt, validate, tflint, actionlint, shellcheck of `.github/scripts`, gitleaks, trivy → **Code Quality Summary**. A change under `terraform/modules/` or `live/<env>/shared/` validates every root |
 | `pr-template` | every PR, and when its title or body is edited | the title passes commitlint; every section of the base branch's template is filled and every checklist item is ticked or marked n/a; bots get the title check only → **Quality — PR Template** |
 | `setup-cd` | merge to `dev` touching a GCP `_setup` root, a module it sources or `.github/scripts/terraform/**` | applies org, then stg, then prd, each after a required reviewer approves in the `setup` environment. `TF_APPLY_ENABLE_PRD` does not gate it: `prd/gcp/_setup` holds identities and access, not the workload |
-| `stg-cd` | merge to `dev` | only the GCP apply waits for `setup-cd` when the push touched its paths; failed or cancelled setup runs block that apply, even for an older commit. Cloudflare runs in parallel and can apply while setup approval is pending or after setup fails. The tunnel token is written only after both applies succeed |
+| `stg-cd` | merge to `dev` | only the GCP apply waits for `setup-cd` when the push touched its paths; failed or cancelled setup runs block that apply, even for an older commit. Cloudflare runs once the GCP apply succeeded, because it reads the handoff that apply writes |
 | `org-cd` | merge to `dev` | applies org Cloudflare and org PostHog, then writes the PostHog project token to stg's secret |
 | `prd-cd` | every push | GCP, then Cloudflare once GCP succeeded. **Switched off** by `TF_APPLY_ENABLE_PRD` — shows as skipped |
 | `organization-member-access-cd` | by hand from `dev` | applies the member list to GCP and PostHog, after a required reviewer approves in the `organization-member-access` environment |

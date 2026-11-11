@@ -108,7 +108,6 @@ jobs:
         working-directory: ${{ inputs.root }}
         shell: bash
         env:
-          TF_VAR_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
           TF_VAR_management_state_bucket: ${{ inputs.state_bucket }}
         run: ${{ github.workspace }}/.github/scripts/terraform/plan.sh
