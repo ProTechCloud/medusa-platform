@@ -394,10 +394,8 @@ log lines — and is a filter in PostHog, not a second project to keep in step.
 ## Secrets and state
 
 **No secret value reaches a GCP state file.** Terraform creates secret containers, never
-their contents; the tunnel token is fetched from the Cloudflare API by the deploy job and
-written under an identity that can add a version to that one secret and cannot read it
-back. The PostHog project token takes the same path: `_posthog-live-apply.yml` reads it from
-the `org/posthog` state after the apply and adds it as a version of stg's
+their contents. The PostHog project token reaches its secret without passing through one:
+`_posthog-live-apply.yml` reads it from the `org/posthog` state after the apply and adds it as a version of stg's
 `medusa_stg_posthog_posthog-project-token`, as the federated identity of that apply, which
 holds `secretVersionAdder` on that one secret. `stg-cd` creates the secret on the same push,
 so the step retries the write every 20 seconds for up to ten minutes until it exists. The only value the GCP roots write into
