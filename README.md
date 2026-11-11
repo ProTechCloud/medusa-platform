@@ -441,7 +441,7 @@ Two roles, and nobody gets a shell:
 | read-only | the developer group | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
 | administration | one named person, and whoever the member list gives the `administration` profile | full access on `stg` and `prd`, for what CI cannot do, including reading a secret value |
 
-With read-only, stopping an instance, changing anything, or reading a secret value is
+With read-only, stopping a service, changing anything, or reading a secret value is
 refused. Membership is managed in the Google Group, so adding or removing a developer is
 not a code change and not a deploy.
 

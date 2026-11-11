@@ -10,7 +10,7 @@ variable "name" {
 
 variable "location" {
   type        = string
-  description = "Region. Keep it the same as the VM's: a cross-region pull is billed as egress and is slower on every boot."
+  description = "Region. Keep it the same as the Cloud Run service's: a cross-region pull is billed as egress and is slower on every cold start."
 }
 
 variable "description" {
