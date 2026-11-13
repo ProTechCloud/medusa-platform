@@ -74,18 +74,9 @@ variable "apis" {
   type        = list(string)
   default = [
     "compute.googleapis.com",
-
-    # Not optional, though nothing in Terraform calls it. Both containers on
-    # the VM run with Docker's gcplogs driver, which pings Cloud Logging when
-    # the container is created and refuses to start it if the ping fails — so
-    # with this API off, neither the application nor cloudflared ever runs,
-    # and both units restart forever without reaching the edge.
     "logging.googleapis.com",
-
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
-    "iap.googleapis.com",
-    "oslogin.googleapis.com",
     "cloudkms.googleapis.com",
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",

@@ -32,7 +32,7 @@ backend_repository  = "medusa-app"
 # adding or removing a developer is not a code change.
 #
 # This group gets the read-only role: it sees everything, changes nothing, and
-# is denied every secret value. Nobody in it gets a shell on the VM.
+# is denied every secret value.
 developer_group = "group:medusa-platform-developers@googlegroups.com"
 
 # The administration role: full access on stg and prd, for what CI cannot do.

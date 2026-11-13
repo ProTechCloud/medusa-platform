@@ -7,16 +7,10 @@ locals {
 
 }
 
-# Three identities that must never read a secret value, for different reasons.
+# Two identities that must never read a secret value, both for the same reason.
 #
 # Plan runs on pull-request code that nobody has reviewed: if it can read a
 # value, a two-line change to the plan step prints it to a public log.
-#
-# The tunnel-token writer only ever writes. secretVersionAdder already omits
-# the read, but the writer is reached by a deploy job, and a role widened later
-# — by hand, in the console, under pressure — would hand that job the value it
-# just wrote. Deny makes the one-way street a guarantee rather than a property
-# of the role list.
 #
 # The setup plan runs on pull-request code as well, and reads this whole project
 # to refresh this root's state.
@@ -26,13 +20,12 @@ resource "google_iam_deny_policy" "no_secret_values" {
   # 63 characters at most — the API's limit. The longer wording this had
   # failed every apply with a 400, so this policy never existed until it was
   # shortened, and nothing but the apply output said so.
-  display_name = "Plan and token writer may see a secret exists, never its value"
+  display_name = "Plan may see a secret exists, never its value"
 
   rules {
     deny_rule {
       denied_principals = [
         module.plan_spoke.principal,
-        module.tunnel_token_writer.principal,
         local.org.setup_plan_principal,
       ]
       denied_permissions = ["secretmanager.googleapis.com/versions.access"]
@@ -48,8 +41,8 @@ resource "google_iam_deny_policy" "apply_cannot_escalate" {
   # There is no rule here forbidding the apply identity from editing the
   # spokes. Deny conditions accept only tag-matching functions — endsWith and
   # extract are both rejected — so the restriction cannot be written as a
-  # deny. It lives in the allow instead: serviceAccountAdmin reaches only the
-  # instance account, so the spokes are out of reach to begin with.
+  # deny. It lives in the allow instead: the apply identity holds no
+  # serviceAccountAdmin, so the spokes are out of reach to begin with.
 
   # The state bucket is the record of what exists. An apply that can delete it
   # can make the infrastructure unaccountable while leaving it running and

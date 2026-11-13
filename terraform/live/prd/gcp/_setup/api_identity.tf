@@ -1,5 +1,9 @@
-# The identity the Cloud Run service runs as. Created here for the same reason
-# as the instance's: the apply identity never needs serviceAccountAdmin.
+# The identity the Cloud Run service runs as. Created here, not in the workload
+# root, so the apply identity never needs serviceAccountAdmin. That role cannot
+# be narrowed: IAM conditions can only read resource.name for services that
+# publish it, and iam.googleapis.com does not, so an unconditioned grant would
+# let the apply identity edit every service account in the project, its own
+# spokes included.
 resource "google_service_account" "api" {
   account_id   = "medusa-${var.environment}-api"
   project      = var.project_id

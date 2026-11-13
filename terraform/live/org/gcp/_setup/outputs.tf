@@ -51,16 +51,6 @@ output "apply_hubs" {
   value = { for k, m in module.apply_hub : k => m.email }
 }
 
-output "tunnel_token_hubs" {
-  description = "Tunnel-token hub per environment. Separate hubs: a shared one would let one environment's deploy write another's secret."
-  value       = { for k, h in google_service_account.tunnel_token_hub : k => h.email }
-}
-
-output "tunnel_token_hub_names" {
-  description = "Full resource name of each tunnel-token hub, for the bindings that hold its trust rule."
-  value       = { for k, h in google_service_account.tunnel_token_hub : k => h.name }
-}
-
 output "posthog_token_writer" {
   description = "The federated identity that runs _posthog-live-apply.yml, which writes the PostHog project token to each environment's secret after the apply. No service account stands in between, as for its state access."
   value       = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.apply_entry/${one(local.posthog_apply_entries)}"
