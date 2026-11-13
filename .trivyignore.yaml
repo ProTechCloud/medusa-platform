@@ -27,10 +27,8 @@
 #     paths:
 #       - "modules/gcp/<module>/<file>.tf"
 #     statement: >-
-#       The subnet has no flow logs. Nothing routes to it from outside and the
-#       only traffic is the tunnel connector reaching loopback, so the logs
-#       would record one constant flow at a cost the project cannot carry on
-#       the free tier. Revisit if anything else joins the subnet.
+#       <What the check flags, what makes it acceptable here, and what would
+#       make it stop being acceptable.>
 #     expired_at: 2026-01-31
 #     owner: fahlula
 #
