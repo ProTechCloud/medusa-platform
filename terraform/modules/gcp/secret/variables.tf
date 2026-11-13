@@ -9,12 +9,12 @@ variable "environment" {
 }
 
 variable "domain" {
-  description = "What the secret belongs to, e.g. `cloudflare`."
+  description = "What the secret belongs to, e.g. `posthog`."
   type        = string
 }
 
 variable "name" {
-  description = "Leaf name, e.g. `tunnel-token`."
+  description = "Leaf name, e.g. `posthog-project-token`."
   type        = string
 }
 

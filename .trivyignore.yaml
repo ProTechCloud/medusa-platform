@@ -25,27 +25,10 @@
 # misconfigurations:
 #   - id: AVD-GCP-0066
 #     paths:
-#       - "terraform/modules/gcp/api-vm/network.tf"
+#       - "modules/gcp/<module>/<file>.tf"
 #     statement: >-
-#       The subnet has no flow logs. Nothing routes to it from outside and the
-#       only traffic is the tunnel connector reaching loopback, so the logs
-#       would record one constant flow at a cost the project cannot carry on
-#       the free tier. Revisit if anything else joins the subnet.
+#       <What the check flags, what makes it acceptable here, and what would
+#       make it stop being acceptable.>
 #     expired_at: 2026-01-31
 #     owner: fahlula
 #
-misconfigurations:
-  - id: AVD-GCP-0031
-    paths:
-      - "modules/gcp/api-vm/main.tf"
-    statement: >-
-      The API instance has an ephemeral public IP, used for egress only:
-      pulling its image from Artifact Registry and dialling out to the
-      Cloudflare edge. Nothing inbound can reach it — the firewall in
-      network.tf denies all ingress except Google's IAP forwarding range,
-      and the only identity holding a tunnel grant is the deploy spoke.
-      The alternative is Cloud NAT, which is the one line item on this
-      stack the free tier does not cover. Revisit if the project gains a
-      budget, or if anything inbound is ever opened on this instance.
-    expired_at: 2027-04-30
-    owner: fahlula

@@ -62,7 +62,7 @@ GitHub OIDC ──▶ identity pool ──▶ HUB ──tokenCreator──▶ SP
 ```
 
 The hub is the entry point and holds nothing. An environment's apply spoke may also set who becomes
-that environment's deploy and tunnel-token hubs, and its plan spoke may read them. The spoke lives inside the environment it
+that environment's deploy hub, and its plan spoke may read it. The spoke lives inside the environment it
 changes and trusts exactly one hub, set authoritatively — a second path to it cannot be
 added without showing as a diff here.
 
@@ -106,8 +106,7 @@ match of the whole string — there is no wildcard anywhere.
 | Cloudflare / PostHog state, plan | this repo · that provider's plan workflow · a PR or `dev` |
 | Cloudflare / PostHog state, apply | this repo · that provider's apply workflow · `stg`, `prd`, `cloudflare-org` or `posthog-org` · `refs/heads/dev` |
 
-The backend deploy hub and the tunnel-token hubs keep their rules in the environment's
-workload root, in `trust.tf`, so renaming a deploy workflow is one ordinary apply there. The
+The backend deploy hub keeps its rule in the stg workload root, in `trust.tf`, so renaming a deploy workflow is one ordinary apply there. The
 other rules stay in `org/gcp/_setup`.
 
 The claim used is **`job_workflow_ref`**, not `workflow_ref`. The latter names the *caller*,
@@ -401,27 +400,11 @@ holds `secretVersionAdder` on that one secret. `stg-cd` creates the secret on th
 so the step retries the write every 20 seconds for up to ten minutes until it exists. The only value the GCP roots write into
 state is the literal string `REPLACE_ME_VIA_SECRET_MANAGER`.
 
-**What the VM reads before the app starts.** `cloudflared.service` fetches the tunnel token,
-and `medusa-app.service` runs `/etc/medusa/write-app-env.sh` before every start. It writes
-`/var/lib/medusa/app.env`, readable by root alone, which the container gets with
-`--env-file`:
-
-| Variable | Value |
-|---|---|
-| `POSTHOG_HOST` | `https://us.i.posthog.com` |
-| `LOG_POSTHOG_LEVEL` | `warn` |
-| `LOG_STDOUT` | `true` |
-| `LOG_LEVEL` | `info` |
-| `OTEL_TRACES_SAMPLER_ARG` | `1` in stg, `0.1` in prd (`otel_traces_sampler_arg` in each `<env>/gcp`) |
-| `NODE_ENV` | `production` |
-| `POSTHOG_PROJECT_TOKEN` | the latest version of `medusa_<env>_posthog_posthog-project-token`, only when it is real |
-
-The token is optional: without it the API sends nothing to PostHog and runs the same. So
-the script never stops the start. It writes the fixed values, then adds the token only when
-Secret Manager answered within ten seconds with a value that is neither empty nor
-`REPLACE_ME_VIA_SECRET_MANAGER`; otherwise it logs one line saying the token is absent.
-Because the file is rewritten before every start, a restart picks up a new token version;
-`backend-cd` in `medusa-app` restarts the app.
+**What the API reads.** Its environment is set on the Cloud Run service in each
+`<env>/gcp/api.tf`. `POSTHOG_PROJECT_TOKEN` comes from the latest version of
+`medusa_<env>_posthog_posthog-project-token`, and only while `api_reads_posthog_project_token`
+is true: until the secret holds a real version it holds the placeholder, and the service
+would start with it.
 
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
@@ -439,7 +422,7 @@ under that prefix by one identity.
 
 > Secret Manager ids accept only `[a-zA-Z0-9_-]`, so the four-part name in the standard
 > cannot use `/`. The parts are kept and joined with `_`:
-> `medusa/stg/cloudflare/tunnel-token` → `medusa_stg_cloudflare_tunnel-token`.
+> `medusa/stg/posthog/posthog-project-token` → `medusa_stg_posthog_posthog-project-token`.
 
 ## Human access
 
@@ -448,7 +431,7 @@ Sign in with your Google account. No keys are issued, to anyone, anywhere.
 ```sh
 gcloud auth login
 gcloud config set project protech-medusa-stg
-gcloud compute instances list
+gcloud run services list --region us-central1
 ```
 
 Two roles, and nobody gets a shell:
@@ -458,7 +441,7 @@ Two roles, and nobody gets a shell:
 | read-only | the developer group | see everything — **never a secret value**, which is enforced by an IAM deny, not by the absence of a grant |
 | administration | one named person, and whoever the member list gives the `administration` profile | full access on `stg` and `prd`, for what CI cannot do, including reading a secret value |
 
-With read-only, stopping an instance, changing anything, or reading a secret value is
+With read-only, stopping a service, changing anything, or reading a secret value is
 refused. Membership is managed in the Google Group, so adding or removing a developer is
 not a code change and not a deploy.
 

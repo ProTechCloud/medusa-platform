@@ -111,8 +111,8 @@ jobs:
           TF_VAR_owner_email: ${{ secrets.POSTHOG_OWNER_EMAIL }}
         run: terraform apply -auto-approve -input=false -lock-timeout=5m -no-color
 
-      # The project token SDKs send with, into stg's secret, where the VM reads
-      # it before every start of the app. Same identity as the state access
+      # The project token SDKs send with, into stg's secret, where the API's
+      # Cloud Run service reads it when an instance starts. Same identity as the state access
       # above: the stg secret grants this apply entry secretVersionAdder and
       # nothing else (stg/gcp/posthog_project_token.tf), so no service account is impersonated.
       #
