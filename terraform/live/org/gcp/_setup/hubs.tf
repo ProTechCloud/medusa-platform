@@ -30,11 +30,12 @@ module "apply_hub" {
 
 # ---------- the application's deploy identity ----------
 # Same shape as the others: the backend federates to a hub here, and the spoke
-# that lets it push images and roll out the VM lives in the stg project.
+# that lets it push images and roll out the API's service lives in the stg
+# project.
 #
-# This hub and the tunnel-token hubs hold no trust rule in this root. The rules
-# name a workflow and an environment, which change with the workload, so they
-# are in that environment's workload root, in trust.tf.
+# This hub holds no trust rule in this root. The rule names a workflow and an
+# environment, which change with the workload, so it is in the stg workload
+# root, in trust.tf.
 resource "google_service_account" "backend_deploy_hub" {
   account_id   = "medusa-stg-deploy-hub"
   project      = var.management_project_id
@@ -42,32 +43,13 @@ resource "google_service_account" "backend_deploy_hub" {
   description  = "medusa-app deploy entry point"
 }
 
-resource "google_service_account" "tunnel_token_hub" {
-  for_each = var.environment_projects
-
-  account_id   = "medusa-${each.key}-tunnel-token-hub"
-  project      = var.management_project_id
-  display_name = "Entry point for the ${each.key} deploy step that writes the tunnel token"
-  description  = "Entry point for the ${each.key} deploy step that writes the tunnel token"
-}
-
 moved {
   from = module.backend_deploy_hub.google_service_account.hub
   to   = google_service_account.backend_deploy_hub
 }
 
-moved {
-  from = module.tunnel_token_hub["stg"].google_service_account.hub
-  to   = google_service_account.tunnel_token_hub["stg"]
-}
-
-moved {
-  from = module.tunnel_token_hub["prd"].google_service_account.hub
-  to   = google_service_account.tunnel_token_hub["prd"]
-}
-
-# `removed` with `destroy = false`: destroying these would stop the deploy
-# between this apply and the workload root's, which takes the same members over.
+# `removed` with `destroy = false`: destroying it would stop the deploy
+# between this apply and the workload root's, which takes the same member over.
 removed {
   from = module.backend_deploy_hub.google_service_account_iam_member.federated
 
@@ -76,15 +58,7 @@ removed {
   }
 }
 
-removed {
-  from = module.tunnel_token_hub.google_service_account_iam_member.federated
-
-  lifecycle {
-    destroy = false
-  }
-}
-
-# What the workload root needs to hold those rules on a hub, and nothing more.
+# What the workload root needs to hold that rule on a hub, and nothing more.
 # The environment's _setup root grants it to the apply spoke, per hub.
 resource "google_project_iam_custom_role" "hub_trust_editor" {
   project     = var.management_project_id

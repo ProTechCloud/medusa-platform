@@ -1,7 +1,8 @@
 # medusa-platform
 
 Terraform for every environment of [`medusa-app`](https://github.com/ProTechCloud/medusa-app):
-a Cloudflare Tunnel, a small GCE instance behind it, and the keyless identities CI uses.
+the API on Cloud Run behind a Google load balancer, its DNS on Cloudflare, and the keyless
+identities CI uses.
 
 ## Layout
 
@@ -13,7 +14,7 @@ terraform/
     org/cloudflare            DNS that belongs to no environment
     org/posthog               the PostHog project
     org/organization-member-access/…  who may use GCP and PostHog, from one list
-    stg/gcp/_setup            stg state bucket, secrets key, spokes, deny policies
+    stg/gcp/_setup            stg state bucket, secrets key, spokes, the API's identity, deny policies
     stg/gcp                   the stg infrastructure
     stg/cloudflare            stg DNS
     stg/shared                the stg name, zone and hostnames, no state of its own
@@ -259,7 +260,6 @@ keeping them visible makes a wrong value obvious in a log instead of invisible.
 | `STATE_BUCKET_STG` / `_PRD` | `<env>/gcp/_setup` → `state_bucket` |
 | `GCP_PLAN_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `plan_spoke` |
 | `GCP_APPLY_SPOKE_STG` / `_PRD` | `<env>/gcp/_setup` → `apply_spoke` |
-| `GCP_TUNNEL_TOKEN_WRITER_STG` | `stg/gcp/_setup` → `tunnel_token_writer` |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID` | Cloudflare dashboard |
 | `POSTHOG_ORGANIZATION_ID` | PostHog → Settings → Organization → General |
 | `GCP_SETUP_PLAN` | `org/gcp/_setup` → `setup_plan` |
@@ -404,7 +404,9 @@ state is the literal string `REPLACE_ME_VIA_SECRET_MANAGER`.
 `<env>/gcp/api.tf`. `POSTHOG_PROJECT_TOKEN` comes from the latest version of
 `medusa_<env>_posthog_posthog-project-token`, and only while `api_reads_posthog_project_token`
 is true: until the secret holds a real version it holds the placeholder, and the service
-would start with it.
+would start with it. The service runs as `medusa-<env>-api`, which `<env>/gcp/_setup` creates in
+`api_identity.tf` so the apply spoke never needs `serviceAccountAdmin`; the workload root grants
+it the secret.
 
 **One secret value does reach state**: the Cloudflare plan token,
 `cloudflare_account_token.plan.value` in `org/cloudflare/_setup`, listed here because the
@@ -434,7 +436,7 @@ gcloud config set project protech-medusa-stg
 gcloud run services list --region us-central1
 ```
 
-Two roles, and nobody gets a shell:
+Two roles:
 
 | Role | Who | What it allows |
 |---|---|---|
@@ -444,12 +446,6 @@ Two roles, and nobody gets a shell:
 With read-only, stopping a service, changing anything, or reading a secret value is
 refused. Membership is managed in the Google Group, so adding or removing a developer is
 not a code change and not a deploy.
-
-**No role grants an IAP tunnel or OS Login.** That is deliberate rather than missing: a
-shell on the box is the box's identity, and the box reads the tunnel-token and PostHog
-token secrets because it needs them to start. Any human shell would therefore reach a secret
-value, whatever the deny policy says, because the caller on that path is the VM and not the
-person.
 
 The administration role goes to named accounts and never to a group, so every change made
 outside CI has an owner. It sits outside the deny policy — it is the role for the cases

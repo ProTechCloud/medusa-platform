@@ -3,10 +3,7 @@
 # here. Authoritative, so a second holder of either role shows as a diff.
 locals {
   # Only stg has a deploy hub: the application deploys to stg and nowhere else.
-  hubs = merge(
-    { tunnel_token = local.org.tunnel_token_hub_names[var.environment] },
-    var.environment == "stg" ? { backend_deploy = local.org.backend_deploy_hub_name } : {},
-  )
+  hubs = var.environment == "stg" ? { backend_deploy = local.org.backend_deploy_hub_name } : {}
 }
 
 resource "google_service_account_iam_binding" "apply_edits_hub_trust" {

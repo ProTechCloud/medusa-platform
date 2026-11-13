@@ -47,27 +47,6 @@ resource "google_kms_crypto_key_iam_member" "plan_state_key" {
   member        = module.plan_spoke.member
 }
 
-# Refreshing an IAP tunnel binding needs iap.tunnelInstances.getIamPolicy, and
-# that permission sits only in roles/iap.admin and roles/iap.settingsAdmin —
-# both of which can also write. roles/viewer does not carry it, so without
-# this the first plan after the tunnel grants are applied fails on refresh.
-#
-# A custom role with the one permission keeps plan read-only. getIamPolicy
-# reads an access rule; it does not read a secret and it grants no tunnel.
-resource "google_project_iam_custom_role" "iap_policy_reader" {
-  project     = var.project_id
-  role_id     = "medusaIapPolicyReader"
-  title       = "Medusa IAP policy reader"
-  description = "Read the IAM policy of an IAP tunnel instance. Held by the plan spoke so refresh works without granting write."
-  permissions = ["iap.tunnelInstances.getIamPolicy"]
-}
-
-resource "google_project_iam_member" "plan_reads_iap_policy" {
-  project = var.project_id
-  role    = google_project_iam_custom_role.iap_policy_reader.id
-  member  = module.plan_spoke.member
-}
-
 # ---------- apply: changes infrastructure, not itself ----------
 module "apply_spoke" {
   source = "../../../../modules/gcp/wif-spoke"
@@ -81,7 +60,6 @@ module "apply_spoke" {
     { role = "roles/compute.admin" },
     { role = "roles/artifactregistry.admin" },
     { role = "roles/secretmanager.admin" },
-    { role = "roles/iap.admin" },
     { role = "roles/serviceusage.serviceUsageAdmin" },
     { role = "roles/run.admin" },
     { role = "roles/certificatemanager.editor" },
@@ -116,24 +94,10 @@ resource "google_kms_crypto_key_iam_member" "apply_state_key" {
   member        = module.apply_spoke.member
 }
 
-# ---------- tunnel-token writer: one secret, nothing else ----------
-# Exists so the tunnel token never passes through Terraform. The deploy job
-# fetches it from Cloudflare and writes it here; an identity that can write
-# exactly one secret is a far smaller thing to leak than a state file holding
-# the value in clear text.
-module "tunnel_token_writer" {
-  source = "../../../../modules/gcp/wif-spoke"
-
-  project_id  = var.project_id
-  name        = "medusa-tunnel-token"
-  description = "Writes new versions of the tunnel-token secret. Nothing else."
-  hub_member  = local.tunnel_token_hub
-}
-
 # ---------- the application's deploy spoke ----------
 # Same shape as the Terraform spokes, so there is one story for how CI reaches
-# a cloud rather than two. Project-level roles live here; the bindings that
-# name a specific registry or instance are in the workload root, which is
+# a cloud rather than two. It holds no project-level role: the bindings name
+# the registry and the service, so they are in the workload root, which is
 # where those resources exist.
 module "deploy_spoke" {
   count  = var.environment == "stg" ? 1 : 0
@@ -141,16 +105,6 @@ module "deploy_spoke" {
 
   project_id  = var.project_id
   name        = "medusa-deploy"
-  description = "medusa-app deploy: push an image, roll out the API instance."
+  description = "medusa-app deploy: push an image, roll out the API's service."
   hub_member  = local.backend_deploy_hub
-
-  roles = [
-    # osAdminLogin rather than osLogin: the rollout runs a script with sudo,
-    # and plain osLogin lands on the box without it.
-    #
-    # The tunnel grant is not here. It is bound on the instance, in the
-    # workload root, so a second VM in this zone is not reachable by the
-    # deploy — see `deploy_tunnels` there.
-    { role = "roles/compute.osAdminLogin" },
-  ]
 }

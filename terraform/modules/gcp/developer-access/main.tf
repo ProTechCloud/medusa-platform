@@ -1,7 +1,6 @@
 # Human access to an environment project, in two shapes: a group that may look
-# and one person who may act. Nobody gets a shell on the VM — reaching the box
-# means reaching the box's identity, which reads a secret, so the two roles
-# below are the whole of what a person may do here.
+# and one person who may act. The two roles below are the whole of what a
+# person may do here.
 
 # ---------- role 1: read-only ----------
 # `viewer` is the broad "see everything" role. It deliberately does not grant
@@ -40,7 +39,7 @@ resource "google_project_iam_member" "read_only" {
 #
 # secretAccessor because neither of those reads a secret's value — editor
 # manages secrets but not their payloads. Owner would have included it, and a
-# recovery that needs the tunnel token should not start with granting it.
+# recovery that needs a secret's value should not start with granting it.
 resource "google_project_iam_member" "administration" {
   for_each = toset(module.profiles.roles.administration)
 

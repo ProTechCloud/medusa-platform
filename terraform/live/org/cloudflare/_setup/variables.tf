@@ -1,5 +1,5 @@
 variable "account_id" {
-  description = "Cloudflare account the tunnel permissions are scoped to."
+  description = "Cloudflare account the tokens belong to."
   type        = string
 }
 
